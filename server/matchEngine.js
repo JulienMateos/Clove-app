@@ -35,6 +35,11 @@ function mutuallyEligible(a, b) {
   if (b.social_style !== SOCIAL_STYLE.EXTRAVERTI) return false;
   if (!attracted(a.attraction, b.gender)) return false;
   if (!attracted(b.attraction, a.gender)) return false;
+  // Apple 1.2 safety: never match users who have blocked each other, and
+  // keep flagged users (repeat reports) out of the pool.
+  if (store.isBlockedBetween(a.user_id, b.user_id)) return false;
+  if (store.openReportCountAgainst(a.user_id) >= 3) return false;
+  if (store.openReportCountAgainst(b.user_id) >= 3) return false;
   return true;
 }
 

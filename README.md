@@ -100,6 +100,34 @@ Persisté dans `data/clove.json` (écriture atomique via fichier temporaire + re
 
 ---
 
+## Conformité App Store (App Review Guidelines)
+
+Clove intègre les garde-fous qu'Apple exige pour une app de rencontre avec
+contenu généré par les utilisateurs :
+
+| Exigence Apple | Implémentation |
+|---|---|
+| **1.2 — Filtre de contenu** | `server/moderation.js` valide chaque photo (type/taille) et filtre le texte (pseudo, bio, messages). |
+| **1.2 — Signalement** | Menu ⋯ sur chaque profil rencontré → `POST /api/report` (motif + détails). Traité sous 24 h. |
+| **1.2 — Blocage** | `POST /api/block` ; les personnes bloquées ne sont plus jamais proposées (exclusion dans le match engine) et toute session en cours est fermée. |
+| **1.2 — Contact éditeur** | Page « À propos & légal » → support@clove.app. |
+| **1.2 — Éjection des récidivistes** | ≥ 3 signalements ouverts ⇒ l'utilisateur est retiré du pool de matching. |
+| **5.1.1(v) — Suppression de compte in-app** | Profil → « Supprimer mon compte » → `DELETE /api/me` (purge totale : profil, présence, sessions, matchs, messages, blocages). |
+| **5.1 — Consentement & confidentialité** | Étape de consentement explicite à l'inscription (localisation + conditions), politique de confidentialité et conditions in-app, toggle de localisation révocable. |
+| **Classification 17+** | Affichée dans l'app ; réservé aux 17 ans et plus. |
+
+## Direction artistique
+
+- **Base iOS / Apple HIG** : thème clair (systemGroupedBackground), pile de
+  polices système (SF + New York en serif éditorial pour les titres), séparateurs
+  hairline, ombres douces, coins 22 px, safe-area insets, **dark mode** automatique.
+- **Langage De Stijl / Mondrian** : primaires rouge · bleu · jaune posées avec
+  retenue, lignes noires nettes, barre signature, **logo SVG maison** (mark en
+  blocs Mondrian + étincelle).
+- **Couche artisanale** : grain papier subtil en overlay, animations d'entrée
+  soignées, feuilles modales (bottom sheets) iOS, listes façon Réglages,
+  interrupteurs animés, icônes SVG line (aucune dépendance à une police emoji).
+
 ## Note
 
 Réseau sandbox = *integrations-only* : le registre npm et les services externes

@@ -6,8 +6,9 @@ J='Content-Type: application/json'
 tok() { echo "$1" | grep -o '"token":"[^"]*' | cut -d'"' -f4; }
 stat() { echo "$1" | grep -o '"status":"[^"]*' | cut -d'"' -f4; }
 
-AT=$(tok "$(curl -s -X POST $B/api/register -H "$J" -d '{"username":"Alice","gender":"femme","attraction":"homme","socialStyle":"extraverti","avatar":"U"}')")
-BT=$(tok "$(curl -s -X POST $B/api/register -H "$J" -d '{"username":"Bob","gender":"homme","attraction":"femme","socialStyle":"extraverti","avatar":"F"}')")
+CONSENT='"consent":{"terms":true,"location":true}'
+AT=$(tok "$(curl -s -X POST $B/api/register -H "$J" -d "{\"username\":\"Alice\",\"gender\":\"femme\",\"attraction\":\"homme\",\"socialStyle\":\"extraverti\",\"avatar\":\"U\",$CONSENT}")")
+BT=$(tok "$(curl -s -X POST $B/api/register -H "$J" -d "{\"username\":\"Bob\",\"gender\":\"homme\",\"attraction\":\"femme\",\"socialStyle\":\"extraverti\",\"avatar\":\"F\",$CONSENT}")")
 echo "tokens: Alice=${AT:0:6} Bob=${BT:0:6}"
 
 curl -s -X POST $B/api/mode -H "$J" -H "Authorization: Bearer $AT" -d '{"mode":"full"}' >/dev/null
@@ -24,8 +25,10 @@ curl -s -X POST $B/api/session/$SID/interest -H "$J" -H "Authorization: Bearer $
 R=$(curl -s -X POST $B/api/session/$SID/interest -H "$J" -H "Authorization: Bearer $BT" -d '{"interested":true}')
 echo "after interest: $(stat "$R")"
 
-curl -s -X POST $B/api/session/$SID/photo -H "$J" -H "Authorization: Bearer $AT" -d '{"photoUrl":"data:image/png;base64,AAAA"}' >/dev/null
-R=$(curl -s -X POST $B/api/session/$SID/photo -H "$J" -H "Authorization: Bearer $BT" -d '{"photoUrl":"data:image/png;base64,BBBB"}')
+# A valid 1x1 PNG (passes the content filter's type + min-size checks)
+PNG="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+curl -s -X POST $B/api/session/$SID/photo -H "$J" -H "Authorization: Bearer $AT" -d "{\"photoUrl\":\"$PNG\"}" >/dev/null
+R=$(curl -s -X POST $B/api/session/$SID/photo -H "$J" -H "Authorization: Bearer $BT" -d "{\"photoUrl\":\"$PNG\"}")
 echo "after photos: $(stat "$R")"
 
 # Verify Bob can now see Alice's photo (review reveals it)
@@ -45,7 +48,7 @@ MSGS=$(curl -s $B/api/matches/$MID/messages -H "Authorization: Bearer $BT")
 echo "Bob sees messages: $(echo "$MSGS" | grep -o '"body":"[^"]*' | cut -d'"' -f4)"
 
 # Negative test: incompatible pair should NOT match (Carol likes women, Bob is homme)
-CT=$(tok "$(curl -s -X POST $B/api/register -H "$J" -d '{"username":"Carol","gender":"femme","attraction":"femme","socialStyle":"extraverti"}')")
+CT=$(tok "$(curl -s -X POST $B/api/register -H "$J" -d "{\"username\":\"Carol\",\"gender\":\"femme\",\"attraction\":\"femme\",\"socialStyle\":\"extraverti\",$CONSENT}")")
 curl -s -X POST $B/api/mode -H "$J" -H "Authorization: Bearer $CT" -d '{"mode":"full"}' >/dev/null
 HB2=$(curl -s -X POST $B/api/heartbeat -H "$J" -H "Authorization: Bearer $CT" -d '{"lat":40.9481,"lng":-4.1184,"radius":120,"mode":"full"}')
 S2=$(echo "$HB2" | grep -o '"sessionId":"[^"]*' | cut -d'"' -f4)

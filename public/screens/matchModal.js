@@ -1,6 +1,7 @@
 import { h } from '../dom.js';
 import { api } from '../api.js';
 import { state, render, closeSession } from '../app.js';
+import { safetyMenu } from '../safety.js';
 
 function challengeEmoji(txt = '') {
   const t = txt.toLowerCase();
@@ -54,6 +55,8 @@ export function renderMatchModal(s) {
         h('div', { class: 'avatar' }, s.other?.avatar || '👤'),
         h('div', {}, h('div', { style: { fontWeight: 700 } }, `${s.other?.username || 'Anonyme'} ${s.other?.verified ? '✅' : ''}`),
           h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Profil dévoilé après votre rencontre')),
+        h('div', { class: 'spacer' }),
+        safetyMenu(s.other, { context: 'profile', onDone: () => { closeSession(); } }),
       ),
       h('div', { class: 'btn-row' },
         h('button', { class: 'btn secondary', onClick: () => act(() => api.interest(s.sessionId, false)) }, 'Pas maintenant'),
@@ -101,7 +104,11 @@ export function renderMatchModal(s) {
 
   else if (status === 'PHOTO_REVIEW') {
     inner.append(
-      h('span', { class: 'pill' }, 'Le verdict'),
+      h('div', { class: 'row' },
+        h('span', { class: 'pill' }, 'Le verdict'),
+        h('div', { class: 'spacer' }),
+        safetyMenu(s.other, { context: 'photo', onDone: () => { closeSession(); } }),
+      ),
       h('div', { class: 'headline' }, 'Le courant est passé ?'),
       h('p', { class: 'muted' }, 'Voici vos deux défis. Envie de continuer avec cette personne ?'),
       h('div', { class: 'review-grid', style: { margin: '16px 0' } },

@@ -24,6 +24,8 @@ const EMPTY = {
   sessions: [],
   matches: [],
   messages: [],
+  blocks: [], // { id, blocker_id, blocked_id, created_at }
+  reports: [], // { id, reporter_id, reported_id, context, reason, note, status, created_at }
 };
 
 function load() {

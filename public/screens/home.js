@@ -1,7 +1,7 @@
 import { h } from '../dom.js';
 import { api } from '../api.js';
 import { state, render, toast } from '../app.js';
-import { mondrianBar, icon } from '../ui.js';
+import { mondrianBar, icon, logoMark } from '../ui.js';
 
 const DEFAULT = { lat: 40.9481, lng: -4.1184 };
 const MODES = [
@@ -70,7 +70,7 @@ export function renderHome() {
 
   const shell = h('div', { class: 'app-shell' },
     h('div', { class: 'brand' },
-      h('div', { class: 'logo' }, 'C'),
+      logoMark(42),
       h('div', {}, h('h1', {}, 'Clove'), h('p', { class: 'tag' }, `Bonjour ${u.username}${u.verified ? ' · vérifié' : ''}`)),
     ),
     mondrianBar(),

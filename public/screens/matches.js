@@ -1,6 +1,8 @@
 import { h } from '../dom.js';
 import { api } from '../api.js';
 import { state, render } from '../app.js';
+import { safetyMenu } from '../safety.js';
+import { logoMark } from '../ui.js';
 
 let loaded = false;
 
@@ -41,7 +43,9 @@ export function renderMatches() {
       h('div', { class: 'card' },
         h('div', { class: 'row' }, h('div', { class: 'avatar' }, m.other?.avatar || '👤'),
           h('div', {}, h('div', { style: { fontWeight: 700 } }, `${m.other?.username} ${m.other?.verified ? '✅' : ''}`),
-            h('div', { class: 'muted', style: { fontSize: '12px' } }, `📍 ${m.meetingSpot?.name || ''}`))),
+            h('div', { class: 'muted', style: { fontSize: '12px' } }, `📍 ${m.meetingSpot?.name || ''}`)),
+          h('div', { class: 'spacer' }),
+          safetyMenu(m.other, { context: 'message', onDone: () => { state.activeMatch = null; loaded = false; render(); } })),
         log,
         h('div', { class: 'chat-input' }, input, h('button', { class: 'btn', onClick: () => send(input) }, 'Envoyer')),
       ),
@@ -50,8 +54,8 @@ export function renderMatches() {
 
   // List view
   const shell = h('div', { class: 'app-shell' },
-    h('div', { class: 'brand' }, h('div', { class: 'logo' }, 'C'),
-      h('div', {}, h('h1', {}, 'Tes matchs'), h('p', { class: 'tag' }, 'Uniquement des rencontres bien réelles.'))),
+    h('div', { class: 'brand' }, logoMark(42),
+      h('div', {}, h('h1', {}, 'Matchs'), h('p', { class: 'tag' }, 'Uniquement des rencontres bien réelles.'))),
   );
   if (state.matches.length === 0) {
     shell.append(h('div', { class: 'card center' },

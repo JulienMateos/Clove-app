@@ -32,6 +32,12 @@ export const api = {
   matches: () => req('GET', '/api/matches'),
   messages: (id) => req('GET', `/api/matches/${id}/messages`),
   sendMessage: (id, body) => req('POST', `/api/matches/${id}/messages`, { body }),
+  // Safety & compliance
+  block: (userId) => req('POST', '/api/block', { userId }),
+  unblock: (userId) => req('POST', '/api/unblock', { userId }),
+  report: (payload) => req('POST', '/api/report', payload),
+  deleteAccount: () => req('DELETE', '/api/me'),
+  setConsent: (payload) => req('POST', '/api/consent', payload),
 };
 
 export function connectWS(onMessage) {

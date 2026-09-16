@@ -5,7 +5,8 @@ import { renderHome } from './screens/home.js';
 import { renderMatches } from './screens/matches.js';
 import { renderProfile } from './screens/profile.js';
 import { renderMatchModal } from './screens/matchModal.js';
-import { icon } from './ui.js';
+import { renderLegal } from './screens/legal.js';
+import { icon, logoMark } from './ui.js';
 
 const TERMINAL = ['COMPLETED', 'FAILED', 'CANCELLED'];
 const root = document.getElementById('app');
@@ -18,7 +19,9 @@ export const state = {
   session: null, // live match session view
   wsClose: null,
   onboardingStep: 0,
-  onboardingDraft: { username: '', gender: '', attraction: '', socialStyle: '', avatar: '🦊', bio: '' },
+  onboardingDraft: { username: '', gender: '', attraction: '', socialStyle: '', avatar: '🦊', bio: '', consent: { terms: false, location: false } },
+  // legal / safety sub-page (null = none)
+  legalPage: null,
   // home local state
   radius: 120,
   nearby: 0,
@@ -52,7 +55,7 @@ export function toast(msg) {
 // ---- Render dispatch -----------------------------------------------------
 export function render() {
   if (!state.booted) {
-    mount(root, h('div', { class: 'boot' }, h('div', { class: 'logo', style: { width: '60px', height: '60px', fontSize: '30px' } }, 'C')));
+    mount(root, h('div', { class: 'boot' }, logoMark(64)));
     return;
   }
   if (!state.user) {
@@ -65,6 +68,14 @@ export function render() {
   // Live match takes over the whole screen.
   if (state.session) {
     frag.append(renderMatchModal(state.session));
+  }
+
+  // Legal / safety sub-pages open on top of the Profile tab (with a back arrow).
+  if (state.legalPage !== null && state.legalPage !== undefined) {
+    frag.append(renderLegal());
+    frag.append(renderNav());
+    mount(root, frag);
+    return;
   }
 
   let screen;

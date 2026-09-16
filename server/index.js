@@ -11,6 +11,7 @@ import * as hub from './hub.js';
 import * as engine from './matchEngine.js';
 import { attachWebSocket } from './ws.js';
 import { MODE } from './constants.js';
+import { moderateText, moderatePhoto } from './moderation.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4000;
@@ -74,10 +75,19 @@ function authUser(req) {
 
 // ---- Auth / profile ------------------------------------------------------
 post('/api/register', async (req, res, params, body) => {
-  const { username, gender, attraction, socialStyle, bio, avatar } = body || {};
+  const { username, gender, attraction, socialStyle, bio, avatar, consent } = body || {};
   if (!username || !gender || !attraction) {
     return json(res, 400, { error: 'username, gender, attraction requis' });
   }
+  // Apple 5.1: require explicit agreement to terms + location use at sign-up.
+  if (!consent || !consent.terms) {
+    return json(res, 400, { error: 'consentement requis' });
+  }
+  const nameCheck = moderateText(String(username));
+  const bioCheck = bio ? moderateText(String(bio)) : { ok: true };
+  if (!nameCheck.ok) return json(res, 400, { error: 'Pseudo non autorisé.' });
+  if (!bioCheck.ok) return json(res, 400, { error: 'Bio non autorisée.' });
+
   const user = store.createUser({
     username: String(username).slice(0, 40),
     gender,
@@ -85,6 +95,7 @@ post('/api/register', async (req, res, params, body) => {
     socialStyle: socialStyle || 'introverti',
     bio: (bio || '').slice(0, 280),
     avatar: avatar || '',
+    consent,
   });
   json(res, 200, { token: user.token, user: safeUser(user), presence: store.getPresence(user.id) });
 });
@@ -99,8 +110,78 @@ put('/api/me', (req, res, params, body) => {
   const u = authUser(req);
   if (!u) return json(res, 401, { error: 'unauthorized' });
   const { username, bio, avatar, socialStyle, attraction } = body || {};
+  if (username != null && !moderateText(String(username)).ok) {
+    return json(res, 400, { error: 'Pseudo non autorisé.' });
+  }
+  if (bio != null && bio !== '' && !moderateText(String(bio)).ok) {
+    return json(res, 400, { error: 'Bio non autorisée.' });
+  }
   const updated = store.updateProfile(u.id, { username, bio, avatar, socialStyle, attraction });
   json(res, 200, { user: safeUser(updated) });
+});
+
+// Apple 5.1.1(v): in-app account deletion (irreversible data purge).
+route('DELETE', '/api/me', (req, res) => {
+  const u = authUser(req);
+  if (!u) return json(res, 401, { error: 'unauthorized' });
+  const live = store.findLiveSessionForUser(u.id);
+  if (live) engine.cancelSession(live.id, 'account-deleted');
+  store.deleteAccount(u.id);
+  json(res, 200, { deleted: true });
+});
+
+// Consent update (e.g. toggling location permission later).
+post('/api/consent', (req, res, params, body) => {
+  const u = authUser(req);
+  if (!u) return json(res, 401, { error: 'unauthorized' });
+  const updated = store.setConsent(u.id, body || {});
+  json(res, 200, { user: safeUser(updated) });
+});
+
+// ---- Safety: block & report (Apple 1.2) ----------------------------------
+post('/api/block', (req, res, params, body) => {
+  const u = authUser(req);
+  if (!u) return json(res, 401, { error: 'unauthorized' });
+  const { userId } = body || {};
+  if (!userId) return json(res, 400, { error: 'userId requis' });
+  store.blockUser(u.id, userId);
+  // If we're in a live session with the blocked user, tear it down.
+  const live = store.findLiveSessionForUser(u.id);
+  if (live && (live.initiator_id === userId || live.responder_id === userId)) {
+    engine.cancelSession(live.id, 'blocked');
+  }
+  json(res, 200, { blocked: true });
+});
+
+post('/api/unblock', (req, res, params, body) => {
+  const u = authUser(req);
+  if (!u) return json(res, 401, { error: 'unauthorized' });
+  const { userId } = body || {};
+  if (!userId) return json(res, 400, { error: 'userId requis' });
+  store.unblockUser(u.id, userId);
+  json(res, 200, { unblocked: true });
+});
+
+post('/api/report', (req, res, params, body) => {
+  const u = authUser(req);
+  if (!u) return json(res, 401, { error: 'unauthorized' });
+  const { userId, context, reason, note, alsoBlock } = body || {};
+  if (!userId) return json(res, 400, { error: 'userId requis' });
+  const report = store.createReport({
+    reporterId: u.id,
+    reportedId: userId,
+    context,
+    reason,
+    note,
+  });
+  if (alsoBlock) {
+    store.blockUser(u.id, userId);
+    const live = store.findLiveSessionForUser(u.id);
+    if (live && (live.initiator_id === userId || live.responder_id === userId)) {
+      engine.cancelSession(live.id, 'reported');
+    }
+  }
+  json(res, 200, { reported: true, id: report.id });
 });
 
 // ---- Availability & presence ---------------------------------------------
@@ -153,6 +234,8 @@ post('/api/session/:id/photo', (req, res, params, body) => {
   const u = authUser(req);
   if (!u) return json(res, 401, { error: 'unauthorized' });
   if (!body?.photoUrl) return json(res, 400, { error: 'photoUrl requis' });
+  const check = moderatePhoto(body.photoUrl); // Apple 1.2 content filter
+  if (!check.ok) return json(res, 400, { error: check.reason });
   const session = engine.submitPhoto(params.id, u.id, body.photoUrl);
   json(res, 200, { session: session ? engine.sessionView(session, u.id) : null });
 });
@@ -206,9 +289,9 @@ post('/api/matches/:id/messages', (req, res, params, body) => {
   if (!match || (match.user_a !== u.id && match.user_b !== u.id)) {
     return json(res, 404, { error: 'not found' });
   }
-  const text = (body?.body || '').toString().slice(0, 1000);
-  if (!text.trim()) return json(res, 400, { error: 'message vide' });
-  const msg = store.addMessage(match.id, u.id, text);
+  const check = moderateText(body?.body); // Apple 1.2 content filter
+  if (!check.ok) return json(res, 400, { error: check.reason });
+  const msg = store.addMessage(match.id, u.id, check.text);
   const otherId = match.user_a === u.id ? match.user_b : match.user_a;
   hub.sendTo(otherId, 'message', { matchId: match.id, message: msg });
   json(res, 200, { message: msg });
@@ -225,15 +308,19 @@ function safeUser(u) {
     bio: u.bio,
     avatar: u.avatar,
     verified: !!u.verified,
+    consentLocation: !!u.consent_location,
+    consentTerms: !!u.consent_terms,
   };
 }
 
 function countNearby(presence) {
   if (!presence || presence.lat == null || presence.mode === MODE.GHOST) return 0;
   const all = store.activePresences();
+  const blocked = store.blockedIdsFor(presence.user_id);
   let n = 0;
   for (const p of all) {
     if (p.user_id === presence.user_id) continue;
+    if (blocked.has(p.user_id)) continue; // don't count blocked users
     const d = quickDist(presence, p);
     if (d <= (presence.radius || 120) * 5) n++;
   }

@@ -1,13 +1,13 @@
 import { h } from '../dom.js';
 import { api, setToken } from '../api.js';
 import { state, render, onLoggedIn } from '../app.js';
-import { mondrianBar } from '../ui.js';
+import { mondrianBar, logoMark } from '../ui.js';
 
 const AVATARS = ['🦊', '🐼', '🦁', '🐙', '🦄', '🐝', '🦋', '🐸', '🦉', '🐳'];
 
 function brand() {
   return h('div', { class: 'brand' },
-    h('div', { class: 'logo' }, 'C'),
+    logoMark(42),
     h('div', {},
       h('h1', {}, 'Clove'),
       h('p', { class: 'tag' }, "On se voit d'abord. On discute ensuite."),
@@ -102,9 +102,44 @@ export function renderOnboarding() {
     if (d.socialStyle === 'introverti') {
       card.append(h('p', { class: 'sub', style: { marginTop: '12px' } }, 'Parfait. Tu pourras explorer en mode Glance sans être embarqué·e dans un défi.'));
     }
-    card.append(h('button', { class: 'btn', disabled: !d.socialStyle, onClick: finish }, 'Entrer dans Clove'));
+    card.append(h('button', { class: 'btn', disabled: !d.socialStyle, onClick: () => go(4) }, 'Continuer'));
+    shell.append(card);
+  }
+
+  if (step === 4) {
+    const card = h('div', { class: 'card fade-in' },
+      h('h2', {}, 'Confidentialité & consentement'),
+      h('p', { class: 'sub' }, 'Chez Clove, on collecte le strict minimum. Voici ce à quoi tu consens — tu peux tout retirer plus tard.'),
+
+      consentRow('location', '📍 Localisation en temps réel',
+        'Uniquement quand tu es en Glance ou Full, pour détecter une personne compatible tout près. Jamais en mode Ghost.'),
+      consentRow('terms', '📄 Conditions & règles de communauté',
+        'Tu as 17 ans ou plus, et tu acceptes nos conditions et notre politique de confidentialité.'),
+
+      h('p', { class: 'muted', style: { fontSize: '12px', marginTop: '4px' } },
+        'Contenu modéré · Blocage et signalement en un geste · Suppression de compte à tout moment.'),
+
+      h('button', { class: 'btn', disabled: !(d.consent.location && d.consent.terms),
+        onClick: finish }, 'Entrer dans Clove'),
+      h('p', { class: 'muted center', style: { fontSize: '11px', marginTop: '10px' } }, 'Réservé aux 17 ans et plus.'),
+    );
     shell.append(card);
   }
 
   return shell;
+}
+
+function consentRow(key, title, sub) {
+  const d = draft();
+  const row = h('button', {
+    class: 'consent-row' + (d.consent[key] ? ' on' : ''),
+    onClick: () => { d.consent[key] = !d.consent[key]; render(); },
+  },
+    h('span', { class: 'consent-check' }, d.consent[key] ? '✓' : ''),
+    h('span', { class: 'consent-main' },
+      h('span', { class: 'consent-title' }, title),
+      h('span', { class: 'consent-sub' }, sub),
+    ),
+  );
+  return row;
 }

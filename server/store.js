@@ -19,7 +19,7 @@ const messages = () => db.table('messages');
 
 // ---- Users ---------------------------------------------------------------
 
-export function createUser({ username, gender, attraction, socialStyle, bio, avatar }) {
+export function createUser({ username, gender, attraction, socialStyle, bio, avatar, consent }) {
   const id = nanoid();
   const token = nanoid(32);
   const ts = now();
@@ -34,6 +34,10 @@ export function createUser({ username, gender, attraction, socialStyle, bio, ava
     avatar: avatar || '',
     photo_url: '',
     verified: 1,
+    // Apple 5.1.1: record explicit consent to location + data processing.
+    consent_location: consent?.location ? 1 : 0,
+    consent_terms: consent?.terms ? 1 : 0,
+    consent_at: consent ? ts : null,
     created_at: ts,
   };
   users().push(user);
@@ -270,4 +274,115 @@ export function messagesForMatch(matchId) {
   return messages()
     .filter((m) => m.match_id === matchId)
     .sort((a, b) => a.created_at - b.created_at);
+}
+
+
+// ---- Consent (Apple 5.1 / 5.1.1) -----------------------------------------
+
+export function setConsent(userId, { location, terms }) {
+  const u = getUserById(userId);
+  if (!u) return null;
+  if (location != null) u.consent_location = location ? 1 : 0;
+  if (terms != null) u.consent_terms = terms ? 1 : 0;
+  u.consent_at = now();
+  db.persist();
+  return u;
+}
+
+// ---- Blocking (Apple 1.2: ability to block abusive users) ----------------
+
+const blocks = () => db.table('blocks');
+
+export function blockUser(blockerId, blockedId) {
+  if (blockerId === blockedId) return null;
+  const exists = blocks().find(
+    (b) => b.blocker_id === blockerId && b.blocked_id === blockedId
+  );
+  if (!exists) {
+    blocks().push({
+      id: nanoid(),
+      blocker_id: blockerId,
+      blocked_id: blockedId,
+      created_at: now(),
+    });
+    db.persist();
+  }
+  return true;
+}
+
+export function unblockUser(blockerId, blockedId) {
+  const arr = blocks();
+  const i = arr.findIndex(
+    (b) => b.blocker_id === blockerId && b.blocked_id === blockedId
+  );
+  if (i >= 0) {
+    arr.splice(i, 1);
+    db.persist();
+  }
+  return true;
+}
+
+// True if either user has blocked the other (mutual exclusion for matching).
+export function isBlockedBetween(a, b) {
+  return blocks().some(
+    (x) =>
+      (x.blocker_id === a && x.blocked_id === b) ||
+      (x.blocker_id === b && x.blocked_id === a)
+  );
+}
+
+export function blockedIdsFor(userId) {
+  const set = new Set();
+  for (const b of blocks()) {
+    if (b.blocker_id === userId) set.add(b.blocked_id);
+    if (b.blocked_id === userId) set.add(b.blocker_id);
+  }
+  return set;
+}
+
+// ---- Reporting (Apple 1.2: mechanism to report objectionable content) ----
+
+const reports = () => db.table('reports');
+
+export function createReport({ reporterId, reportedId, context, reason, note }) {
+  const r = {
+    id: nanoid(),
+    reporter_id: reporterId,
+    reported_id: reportedId,
+    context: context || 'profile', // profile | photo | message
+    reason: reason || 'other',
+    note: (note || '').toString().slice(0, 500),
+    status: 'open',
+    created_at: now(),
+  };
+  reports().push(r);
+  db.persist();
+  return r;
+}
+
+// Count of open reports against a user — used to auto-suspend repeat offenders.
+export function openReportCountAgainst(userId) {
+  return reports().filter((r) => r.reported_id === userId && r.status === 'open')
+    .length;
+}
+
+// ---- Account deletion (Apple 5.1.1(v): in-app account deletion) ----------
+// Purges ALL data for a user: profile, presence, sessions, matches, messages,
+// blocks and reports they authored.
+export function deleteAccount(userId) {
+  const purge = (name, pred) => {
+    const arr = db.table(name);
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (pred(arr[i])) arr.splice(i, 1);
+    }
+  };
+  purge('messages', (m) => m.sender_id === userId);
+  purge('matches', (m) => m.user_a === userId || m.user_b === userId);
+  purge('sessions', (s) => s.initiator_id === userId || s.responder_id === userId);
+  purge('presence', (p) => p.user_id === userId);
+  purge('blocks', (b) => b.blocker_id === userId || b.blocked_id === userId);
+  purge('reports', (r) => r.reporter_id === userId);
+  purge('users', (u) => u.id === userId);
+  db.persist();
+  return true;
 }
