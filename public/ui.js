@@ -57,6 +57,10 @@ const ICONS = {
     '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>',
   check:
     '<path d="M20 6L9 17l-5-5"/>',
+  camera:
+    '<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.4"/>',
+  clock:
+    '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 };
 
 function svg(w, h, viewBox) {
@@ -106,4 +110,66 @@ export function closeSheet() {
   const b = document.querySelector('.sheet-backdrop');
   if (b && b.__close) b.__close();
   else if (b) b.remove();
+}
+
+// ---- Match flow progress stepper -----------------------------------------
+// Four dots representing: proximity → intérêt → défi → verdict.
+const STEP_ORDER = ['PENDING', 'INTEREST_WAIT', 'PHOTO_CHALLENGE', 'PHOTO_REVIEW', 'COMPLETED'];
+export function matchStepper(status) {
+  // Map INTEREST_WAIT to the same visual step as intérêt.
+  const idxByStatus = {
+    PENDING: 0,
+    INTEREST_WAIT: 1,
+    PHOTO_CHALLENGE: 2,
+    PHOTO_REVIEW: 3,
+    COMPLETED: 4,
+  };
+  const active = idxByStatus[status] ?? 0;
+  const labels = ['Étincelle', 'Intérêt', 'Défi', 'Verdict'];
+  return h('div', { class: 'stepper' },
+    labels.map((label, i) => h('div', {
+      class: 'step' + (i < active ? ' done' : '') + (i === active ? ' active' : ''),
+    },
+      h('span', { class: 'step-dot' }, i < active ? '✓' : String(i + 1)),
+      h('span', { class: 'step-label' }, label),
+    ))
+  );
+}
+
+// ---- Circular countdown ring ---------------------------------------------
+// Returns { node, stop }. `seconds` total; calls onExpire() at 0.
+export function countdownRing(seconds, onExpire) {
+  const R = 26;
+  const C = 2 * Math.PI * R;
+  const wrap = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  wrap.setAttribute('viewBox', '0 0 64 64');
+  wrap.setAttribute('width', '64');
+  wrap.setAttribute('height', '64');
+  wrap.classList.add('countdown');
+  wrap.innerHTML = `
+    <circle cx="32" cy="32" r="${R}" fill="none" stroke="var(--separator-strong)" stroke-width="4"/>
+    <circle class="cd-arc" cx="32" cy="32" r="${R}" fill="none" stroke="var(--brand)" stroke-width="4"
+      stroke-linecap="round" transform="rotate(-90 32 32)"
+      stroke-dasharray="${C}" stroke-dashoffset="0"/>
+    <text class="cd-text" x="32" y="38" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text)"></text>`;
+  const arc = wrap.querySelector('.cd-arc');
+  const txt = wrap.querySelector('.cd-text');
+  let remaining = seconds;
+  let timer = null;
+
+  function tick() {
+    txt.textContent = String(remaining);
+    const frac = remaining / seconds;
+    arc.setAttribute('stroke-dashoffset', String(C * (1 - frac)));
+    arc.setAttribute('stroke', remaining <= 10 ? 'var(--danger)' : 'var(--brand)');
+    if (remaining <= 0) {
+      clearInterval(timer);
+      onExpire && onExpire();
+      return;
+    }
+    remaining -= 1;
+  }
+  tick();
+  timer = setInterval(tick, 1000);
+  return { node: wrap, stop: () => clearInterval(timer) };
 }

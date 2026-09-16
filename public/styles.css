@@ -441,3 +441,92 @@ body::before {
   .list-ico { background: var(--fill); }
   .age-badge { background: #fff; color: #111; }
 }
+
+
+/* ===========================================================================
+   v4 — Match / défi screen polish
+   =========================================================================== */
+
+.modal .inner { display: flex; flex-direction: column; }
+
+/* Lead paragraph (a touch larger & warmer than .muted) */
+.lead { font-size: 15.5px; line-height: 1.5; color: var(--text-2); margin: 0 0 6px; }
+
+/* ---- Progress stepper ---------------------------------------------------- */
+.stepper { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0 22px; }
+.step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; }
+.step::before {
+  content: ''; position: absolute; top: 13px; left: -50%; width: 100%; height: 2px;
+  background: var(--separator-strong);
+}
+.step:first-child::before { display: none; }
+.step.done::before, .step.active::before { background: var(--brand); }
+.step-dot {
+  width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; background: var(--card-2); color: var(--muted);
+  border: 1.5px solid var(--separator-strong); position: relative; z-index: 1;
+  transition: all 0.25s ease;
+}
+.step.active .step-dot { background: var(--brand); color: #fff; border-color: var(--brand); transform: scale(1.08); box-shadow: 0 0 0 4px rgba(216,30,40,0.14); }
+.step.done .step-dot { background: var(--mondrian-black); color: #fff; border-color: var(--mondrian-black); }
+.step-label { font-size: 10.5px; font-weight: 600; color: var(--muted); letter-spacing: -0.1px; }
+.step.active .step-label { color: var(--brand); }
+.step.done .step-label { color: var(--text); }
+
+/* ---- Person card --------------------------------------------------------- */
+.person-card {
+  display: flex; align-items: center; gap: 14px; background: var(--card);
+  border: 0.5px solid var(--separator); border-radius: 18px; padding: 14px;
+  margin: 18px 0; box-shadow: var(--shadow-card);
+}
+.person-card.center-card { justify-content: center; margin: 14px 0; }
+.person-meta { display: flex; flex-direction: column; gap: 2px; }
+.person-name { font-weight: 700; font-size: 16px; letter-spacing: -0.2px; }
+
+/* ---- Challenge screen ---------------------------------------------------- */
+.challenge-emoji { font-size: 52px; text-align: center; margin: 4px 0 14px; animation: pop 0.5s cubic-bezier(0.22,1.4,0.5,1) both; }
+@keyframes pop { from { opacity: 0; transform: scale(0.4) rotate(-8deg); } to { opacity: 1; transform: none; } }
+.challenge-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--card); border: 0.5px solid var(--separator); border-left: 4px solid var(--gold);
+  border-radius: 18px; padding: 16px 18px; box-shadow: var(--shadow-card);
+}
+.challenge-title { font-family: 'New York', ui-serif, Georgia, serif; font-size: 20px; font-weight: 700; letter-spacing: -0.3px; margin-top: 8px; line-height: 1.15; }
+.challenge-timer { flex-shrink: 0; }
+.countdown { display: block; }
+.cd-arc { transition: stroke-dashoffset 1s linear, stroke 0.3s ease; }
+
+.photo-frame { margin-top: 16px; }
+.photo-frame.small { margin-top: 0; }
+.photo-hint { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; font-weight: 500; }
+
+.waiting-note {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 16px; padding: 12px; border-radius: 14px; background: #34c7590f;
+  color: var(--success); font-size: 14px; font-weight: 600;
+}
+
+/* ---- Waiting / pulse orb ------------------------------------------------- */
+.pulse-orb { position: relative; display: grid; place-items: center; margin: 10px auto 20px; width: 120px; height: 120px; }
+.pulse-orb::before, .pulse-orb::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid var(--brand); opacity: 0; animation: ring 2.4s ease-out infinite;
+}
+.pulse-orb::after { animation-delay: 1.2s; }
+@keyframes ring { 0% { transform: scale(0.5); opacity: 0.6; } 100% { transform: scale(1.15); opacity: 0; } }
+
+/* ---- Match celebration --------------------------------------------------- */
+.match-celebrate .headline { font-family: 'New York', ui-serif, Georgia, serif; }
+.confetti-bar { display: flex; height: 6px; width: 120px; margin: 0 auto 14px; border-radius: 4px; overflow: hidden; animation: cardIn 0.5s ease both; }
+.confetti-bar i { flex: 1; }
+.confetti-bar i:nth-child(1) { background: var(--mondrian-red); }
+.confetti-bar i:nth-child(2) { background: var(--mondrian-yellow); }
+.confetti-bar i:nth-child(3) { background: var(--mondrian-black); }
+.confetti-bar i:nth-child(4) { background: var(--mondrian-blue); }
+.confetti-bar i:nth-child(5) { background: var(--mondrian-red); }
+.spot-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); font-weight: 600; }
+.leaf { font-size: 46px; text-align: center; margin: 8px 0 4px; animation: pop 0.5s ease both; }
+
+/* Modal content slides up a touch on each step change */
+.modal .inner.fade-in { animation: stepIn 0.4s cubic-bezier(0.22,1,0.36,1); }
+@keyframes stepIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }

@@ -100,6 +100,16 @@ Persisté dans `data/clove.json` (écriture atomique via fichier temporaire + re
 
 ---
 
+## Soumission App Store
+
+La documentation prête pour App Store Connect est dans `docs/` :
+- **`docs/APP_STORE.md`** — nom, sous-titre, descriptions FR + EN, texte promo,
+  mots-clés, catégories, 17+, URLs, notes pour l'examen + comptes de démo,
+  liste des captures d'écran.
+- **`docs/PRIVACY_LABELS.md`** — « nutrition labels » de confidentialité alignés
+  sur ce que le code collecte réellement (localisation, pseudo, photos, messages,
+  orientation), avec la correspondance code ⇄ label. Pas de suivi publicitaire.
+
 ## Conformité App Store (App Review Guidelines)
 
 Clove intègre les garde-fous qu'Apple exige pour une app de rencontre avec
