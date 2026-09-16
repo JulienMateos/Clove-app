@@ -1,0 +1,11 @@
+{
+  "name": "clove",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Clove — l'anti-dating app qui renverse les règles du jeu (IRL-first, no-swipe)",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  }
+}
