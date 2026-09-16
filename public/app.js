@@ -5,6 +5,7 @@ import { renderHome } from './screens/home.js';
 import { renderMatches } from './screens/matches.js';
 import { renderProfile } from './screens/profile.js';
 import { renderMatchModal } from './screens/matchModal.js';
+import { icon } from './ui.js';
 
 const TERMINAL = ['COMPLETED', 'FAILED', 'CANCELLED'];
 const root = document.getElementById('app');
@@ -77,13 +78,13 @@ export function render() {
 }
 
 function renderNav() {
-  const tabBtn = (id, ico, label) =>
+  const tabBtn = (id, iconName, label) =>
     h('button', { class: state.tab === id ? 'active' : '', onClick: () => setTab(id) },
-      h('span', { class: 'ico' }, ico), label);
+      h('span', { class: 'ico' }, icon(iconName, 24)), label);
   return h('nav', { class: 'nav' },
-    tabBtn('home', '📡', 'Radar'),
-    tabBtn('matches', '💚', 'Matchs'),
-    tabBtn('profile', '👤', 'Profil'),
+    tabBtn('home', 'radar', 'Radar'),
+    tabBtn('matches', 'heart', 'Matchs'),
+    tabBtn('profile', 'person', 'Profil'),
   );
 }
 

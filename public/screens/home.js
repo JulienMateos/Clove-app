@@ -1,12 +1,13 @@
 import { h } from '../dom.js';
 import { api } from '../api.js';
 import { state, render, toast } from '../app.js';
+import { mondrianBar, icon } from '../ui.js';
 
 const DEFAULT = { lat: 40.9481, lng: -4.1184 };
 const MODES = [
-  { id: 'ghost', emoji: '👻', name: 'Ghost', desc: 'Invisible. Personne ne te sollicite.' },
-  { id: 'glance', emoji: '👀', name: 'Glance', desc: 'Tu jettes un œil, sans être embarqué·e.' },
-  { id: 'full', emoji: '🔥', name: 'Full', desc: 'Dispo maintenant pour un défi IRL.' },
+  { id: 'ghost', ic: 'ghost', name: 'Ghost', desc: 'Invisible. Personne ne te sollicite.' },
+  { id: 'glance', ic: 'glance', name: 'Glance', desc: 'Tu jettes un œil, sans être embarqué·e.' },
+  { id: 'full', ic: 'spark', name: 'Full', desc: 'Dispo maintenant pour un défi IRL.' },
 ];
 
 // ---- Heartbeat loop (runs independently of render) -----------------------
@@ -70,8 +71,9 @@ export function renderHome() {
   const shell = h('div', { class: 'app-shell' },
     h('div', { class: 'brand' },
       h('div', { class: 'logo' }, 'C'),
-      h('div', {}, h('h1', {}, 'Clove'), h('p', { class: 'tag' }, `Salut ${u.username} ${u.verified ? '✅' : ''}`)),
+      h('div', {}, h('h1', {}, 'Clove'), h('p', { class: 'tag' }, `Bonjour ${u.username}${u.verified ? ' · vérifié' : ''}`)),
     ),
+    mondrianBar(),
   );
 
   // Modes card
@@ -80,7 +82,7 @@ export function renderHome() {
     h('p', { class: 'sub' }, 'Tu contrôles ta visibilité en temps réel.'),
     h('div', { class: 'modes' },
       MODES.map((m) => h('button', { class: `mode-card ${m.id}` + (mode === m.id ? ' active' : ''), onClick: () => changeMode(m.id) },
-        h('div', { class: 'emoji' }, m.emoji),
+        h('div', { class: 'emoji' }, icon(m.ic, 26)),
         h('div', { class: 'name' }, m.name),
         h('div', { class: 'desc' }, m.desc),
       )),

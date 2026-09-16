@@ -1,6 +1,7 @@
 import { h } from '../dom.js';
 import { api, setToken } from '../api.js';
 import { state, render, onLoggedIn } from '../app.js';
+import { mondrianBar } from '../ui.js';
 
 const AVATARS = ['🦊', '🐼', '🦁', '🐙', '🦄', '🐝', '🦋', '🐸', '🦉', '🐳'];
 
@@ -32,7 +33,7 @@ async function finish() {
 export function renderOnboarding() {
   const d = draft();
   const step = state.onboardingStep;
-  const shell = h('div', { class: 'app-shell' }, brand());
+  const shell = h('div', { class: 'app-shell' }, brand(), mondrianBar());
 
   if (step === 0) {
     shell.append(h('div', { class: 'card fade-in' },
