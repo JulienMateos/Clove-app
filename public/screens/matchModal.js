@@ -37,7 +37,13 @@ async function act(fn) {
 
 export function renderMatchModal(s) {
   const inner = h('div', { class: 'inner fade-in' });
-  const status = s.status;
+  // Derive the screen from MY perspective. The session status is shared, but
+  // if I haven't answered the interest step yet I should still see the prompt,
+  // even if the other person already said yes (status = INTEREST_WAIT).
+  let status = s.status;
+  if ((status === 'PENDING' || status === 'INTEREST_WAIT') && !s.myInterest) {
+    status = 'PENDING';
+  }
 
   if (status === 'PENDING') {
     inner.append(

@@ -110,17 +110,37 @@ export async function onLoggedIn(user, presence) {
   if (presence) state.presence = presence;
   if (presence?.radius) state.radius = presence.radius;
   startWS();
+  startSessionPoller();
   render();
+}
+
+// Apply an incoming session update. Only re-renders when something actually
+// changed (status, or a field the UI depends on) to avoid clobbering the
+// screen — e.g. wiping a photo the user is composing — on every poll tick.
+function applySessionUpdate(payload, { fromWs = false } = {}) {
+  if (!payload) return;
+  const prev = state.session;
+  const wasNew = (!prev || TERMINAL.includes(prev.status)) && payload.status === 'PENDING';
+  const changed =
+    !prev ||
+    prev.sessionId !== payload.sessionId ||
+    prev.status !== payload.status ||
+    prev.otherPhoto !== payload.otherPhoto ||
+    prev.myPhoto !== payload.myPhoto ||
+    prev.myInterest !== payload.myInterest ||
+    prev.myAccept !== payload.myAccept ||
+    JSON.stringify(prev.meetingSpot) !== JSON.stringify(payload.meetingSpot);
+
+  state.session = payload;
+  if (wasNew) toast('✨ Quelqu’un de compatible est tout près !');
+  if (changed) render();
 }
 
 function startWS() {
   if (state.wsClose) state.wsClose();
   state.wsClose = connectWS((type, payload) => {
     if (type === 'session') {
-      const wasNew = !state.session && payload.status === 'PENDING';
-      state.session = payload;
-      if (wasNew) toast('✨ Quelqu’un de compatible est tout près !');
-      render();
+      applySessionUpdate(payload, { fromWs: true });
     } else if (type === 'message') {
       if (state.activeMatch && payload.matchId === state.activeMatch.id) {
         state.messages.push(payload.message);
@@ -130,6 +150,22 @@ function startWS() {
       }
     }
   });
+}
+
+// ---- Session poller ------------------------------------------------------
+// Belt-and-suspenders: even if the WebSocket push is delayed or dropped by a
+// proxy, this keeps the live match screen advancing (PENDING -> CHALLENGE ->
+// REVIEW -> COMPLETED). Polls only while a non-terminal session is active.
+function startSessionPoller() {
+  if (state.pollTimer) return;
+  state.pollTimer = setInterval(async () => {
+    const s = state.session;
+    if (!s || TERMINAL.includes(s.status)) return; // nothing live to sync
+    try {
+      const { session } = await api.session();
+      if (session) applySessionUpdate(session);
+    } catch {}
+  }, 1500);
 }
 
 // ---- Boot ----------------------------------------------------------------
@@ -143,6 +179,7 @@ function startWS() {
       const { session } = await api.session();
       if (session && !TERMINAL.includes(session.status)) state.session = session;
       startWS();
+      startSessionPoller();
     } catch {}
   }
   state.booted = true;
