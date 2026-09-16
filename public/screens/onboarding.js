@@ -2,8 +2,7 @@ import { h } from '../dom.js';
 import { api, setToken } from '../api.js';
 import { state, render, onLoggedIn } from '../app.js';
 import { mondrianBar, logoMark } from '../ui.js';
-
-const AVATARS = ['🦊', '🐼', '🦁', '🐙', '🦄', '🐝', '🦋', '🐸', '🦉', '🐳'];
+import { avatarIds, avatar, line } from '../art.js';
 
 function brand() {
   return h('div', { class: 'brand' },
@@ -37,7 +36,7 @@ export function renderOnboarding() {
 
   if (step === 0) {
     shell.append(h('div', { class: 'card fade-in' },
-      h('h2', {}, 'Bienvenue 👋'),
+      h('h2', {}, 'Bienvenue'),
       h('p', { class: 'sub' }, "Pas de swipe. Pas de chat sans fin. Clove te fait rencontrer quelqu'un de compatible en vrai, tout près de toi — via un petit défi."),
       h('ul', { class: 'feat' },
         h('li', {}, 'Zéro défilement de profils'),
@@ -57,11 +56,11 @@ export function renderOnboarding() {
         onInput: (e) => { d.username = e.target.value; nextBtn.disabled = !d.username.trim(); } }),
       h('label', {}, 'Avatar'),
     );
-    const chips = h('div', { class: 'chips' },
-      AVATARS.map((a) => h('button', {
-        class: 'chip' + (d.avatar === a ? ' active' : ''), style: { fontSize: '18px' },
-        onClick: () => { d.avatar = a; render(); },
-      }, a)),
+    const chips = h('div', { class: 'avatar-grid' },
+      avatarIds().map((id) => h('button', {
+        class: 'avatar-pick' + (d.avatar === id ? ' active' : ''),
+        onClick: () => { d.avatar = id; render(); },
+      }, avatar(id, 48))),
     );
     card.append(chips);
     card.append(h('label', {}, 'Petite phrase (optionnel, révélée après le match)'));
@@ -93,10 +92,10 @@ export function renderOnboarding() {
       h('h2', {}, 'Comment tu te vois ?'),
       h('p', { class: 'sub' }, "Le défi IRL — se rencontrer via une mission fun — c'est intense. Il n'est proposé qu'aux profils qui aiment ça. Tu peux changer d'avis plus tard."),
       h('div', { class: 'chips col' },
-        h('button', { class: 'chip wide' + (d.socialStyle === 'extraverti' ? ' active' : ''), onClick: () => { d.socialStyle = 'extraverti'; render(); } },
-          '🔥 Plutôt extraverti·e — partant·e pour un défi IRL spontané'),
-        h('button', { class: 'chip wide' + (d.socialStyle === 'introverti' ? ' active' : ''), onClick: () => { d.socialStyle = 'introverti'; render(); } },
-          '🌙 Plutôt introverti·e — je préfère y aller doucement'),
+        h('button', { class: 'chip wide icon-chip' + (d.socialStyle === 'extraverti' ? ' active' : ''), onClick: () => { d.socialStyle = 'extraverti'; render(); } },
+          line('flame', 18), h('span', {}, 'Plutôt extraverti·e — partant·e pour un défi IRL spontané')),
+        h('button', { class: 'chip wide icon-chip' + (d.socialStyle === 'introverti' ? ' active' : ''), onClick: () => { d.socialStyle = 'introverti'; render(); } },
+          line('moon', 18), h('span', {}, 'Plutôt introverti·e — je préfère y aller doucement')),
       ),
     );
     if (d.socialStyle === 'introverti') {
@@ -111,9 +110,9 @@ export function renderOnboarding() {
       h('h2', {}, 'Confidentialité & consentement'),
       h('p', { class: 'sub' }, 'Chez Clove, on collecte le strict minimum. Voici ce à quoi tu consens — tu peux tout retirer plus tard.'),
 
-      consentRow('location', '📍 Localisation en temps réel',
+      consentRow('location', 'pin', 'Localisation en temps réel',
         'Uniquement quand tu es en Glance ou Full, pour détecter une personne compatible tout près. Jamais en mode Ghost.'),
-      consentRow('terms', '📄 Conditions & règles de communauté',
+      consentRow('terms', 'doc', 'Conditions & règles de communauté',
         'Tu as 17 ans ou plus, et tu acceptes nos conditions et notre politique de confidentialité.'),
 
       h('p', { class: 'muted', style: { fontSize: '12px', marginTop: '4px' } },
@@ -129,15 +128,15 @@ export function renderOnboarding() {
   return shell;
 }
 
-function consentRow(key, title, sub) {
+function consentRow(key, iconName, title, sub) {
   const d = draft();
   const row = h('button', {
     class: 'consent-row' + (d.consent[key] ? ' on' : ''),
     onClick: () => { d.consent[key] = !d.consent[key]; render(); },
   },
-    h('span', { class: 'consent-check' }, d.consent[key] ? '✓' : ''),
+    h('span', { class: 'consent-check' }, d.consent[key] ? line('check', 16) : ''),
     h('span', { class: 'consent-main' },
-      h('span', { class: 'consent-title' }, title),
+      h('span', { class: 'consent-title' }, h('span', { class: 'consent-ico' }, line(iconName, 16)), title),
       h('span', { class: 'consent-sub' }, sub),
     ),
   );

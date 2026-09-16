@@ -2,6 +2,7 @@ import { h } from '../dom.js';
 import { api } from '../api.js';
 import { state, render, toast } from '../app.js';
 import { mondrianBar, icon, logoMark } from '../ui.js';
+import { line } from '../art.js';
 
 const DEFAULT = { lat: 40.9481, lng: -4.1184 };
 const MODES = [
@@ -37,8 +38,8 @@ async function changeMode(m) {
   try {
     const { presence } = await api.setMode(m);
     state.presence = presence;
-    if (m === 'full') { toast('Mode Full activé — à l’écoute des rencontres tout près 🔥'); beat(); }
-    if (m === 'ghost') toast('Mode Ghost — tu es invisible 👻');
+    if (m === 'full') { toast('Mode Full activé — à l’écoute des rencontres tout près'); beat(); }
+    if (m === 'ghost') toast('Mode Ghost — tu es invisible');
     if (m === 'glance') beat();
     render();
   } catch {}
@@ -89,8 +90,8 @@ export function renderHome() {
     ),
   );
   if (!extravert && mode === 'full') {
-    modesCard.append(h('p', { class: 'sub', style: { marginTop: '12px', color: 'var(--warn)' } },
-      '⚠️ Ton profil est réglé sur « doucement ». Les défis IRL ne te seront proposés que si tu passes en extraverti dans ton profil.'));
+    modesCard.append(h('p', { class: 'sub warn-note', style: { marginTop: '12px', color: 'var(--warn)' } },
+      line('warning', 15), h('span', {}, 'Ton profil est réglé sur « doucement ». Les défis IRL ne te seront proposés que si tu passes en extraverti dans ton profil.')));
   }
   shell.append(modesCard);
 
@@ -108,10 +109,10 @@ export function renderHome() {
     }
   }
   let statusEl;
-  if (mode === 'ghost') statusEl = h('div', { class: 'radar-status' }, h('div', { class: 'big' }, 'Tu es en pause 👻'), h('div', { class: 'small' }, 'Passe en Glance ou Full pour être détectable.'));
+  if (mode === 'ghost') statusEl = h('div', { class: 'radar-status' }, h('div', { class: 'big' }, 'Tu es en pause'), h('div', { class: 'small' }, 'Passe en Glance ou Full pour être détectable.'));
   else if (mode === 'glance') statusEl = h('div', { class: 'radar-status' }, h('div', { class: 'big' }, `${nearby} personne${nearby !== 1 ? 's' : ''} dans les parages`), h('div', { class: 'small' }, 'Mode exploration — aucun défi ne se lancera.'));
   else statusEl = h('div', { class: 'radar-status' }, h('div', { class: 'big' }, "À l'écoute d'une étincelle…"),
-      h('div', { class: 'small' }, nearby > 0 ? `${nearby} profil${nearby > 1 ? 's' : ''} actif${nearby > 1 ? 's' : ''} autour de toi` : 'Personne tout près pour l’instant. Reste dispo ✨'));
+      h('div', { class: 'small' }, nearby > 0 ? `${nearby} profil${nearby > 1 ? 's' : ''} actif${nearby > 1 ? 's' : ''} autour de toi` : 'Personne tout près pour l’instant. Reste dispo.'));
   shell.append(h('div', { class: 'card' }, h('div', { class: 'radar-wrap' }, radar), statusEl));
 
   // Radius + location simulator
@@ -128,7 +129,7 @@ export function renderHome() {
         h('button', { class: 'btn ghost', onClick: () => setCoords(DEFAULT.lat, DEFAULT.lng) }, 'Segovia'),
       ),
       h('p', { class: 'sub', style: { marginTop: '10px', fontSize: '11px' } },
-        ['💡 Pour tester une rencontre : ouvre un 2ᵉ onglet, crée un profil compatible, mets les deux en ', h('b', {}, 'Full'), ' à la même position (bouton « Segovia »).']),
+        ['Astuce — pour tester une rencontre : ouvre un 2ᵉ onglet, crée un profil compatible, mets les deux en ', h('b', {}, 'Full'), ' à la même position (bouton « Segovia »).']),
     ),
   );
   shell.append(radiusCard);

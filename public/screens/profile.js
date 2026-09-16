@@ -2,6 +2,7 @@ import { h } from '../dom.js';
 import { api, setToken } from '../api.js';
 import { state, render, toast } from '../app.js';
 import { mondrianBar, logoMark, icon, openSheet, closeSheet } from '../ui.js';
+import { avatar } from '../art.js';
 
 export function renderProfile() {
   const u = state.user;
@@ -36,7 +37,7 @@ export function renderProfile() {
     // Identity card
     h('div', { class: 'card' },
       h('div', { class: 'row', style: { marginBottom: '4px' } },
-        h('div', { class: 'avatar big' }, u.avatar || '👤'),
+        h('div', { class: 'avatar art big' }, avatar(u.avatar, 64)),
         h('div', {}, h('div', { style: { fontWeight: 800, fontSize: '20px', letterSpacing: '-0.4px' } }, u.username),
           h('div', { class: 'muted', style: { fontSize: '13px' } }, 'Dévoilé progressivement · après la rencontre'))),
       h('label', {}, 'Prénom / pseudo'),

@@ -530,3 +530,60 @@ body::before {
 /* Modal content slides up a touch on each step change */
 .modal .inner.fade-in { animation: stepIn 0.4s cubic-bezier(0.22,1,0.36,1); }
 @keyframes stepIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+
+/* ===========================================================================
+   v5 — Hand-made SVG artwork (replaces all emoji)
+   =========================================================================== */
+
+/* Avatar tiles now hold an SVG mark instead of an emoji glyph */
+.avatar.art { background: transparent; border: none; padding: 0; overflow: hidden; }
+.avatar.art .art-avatar { width: 100%; height: 100%; border-radius: 16px; display: block; box-shadow: inset 0 0 0 0.5px var(--separator); }
+.avatar.art.big .art-avatar { border-radius: 18px; }
+
+/* Avatar picker grid (onboarding) */
+.avatar-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 4px; }
+.avatar-pick {
+  padding: 4px; border-radius: 16px; background: var(--card-2);
+  border: 2px solid transparent; cursor: pointer; aspect-ratio: 1; display: grid; place-items: center;
+  transition: transform 0.08s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.avatar-pick .art-avatar { width: 100%; height: 100%; border-radius: 12px; display: block; }
+.avatar-pick:active { transform: scale(0.94); }
+.avatar-pick.active { border-color: var(--mondrian-black); box-shadow: 0 4px 14px rgba(17,17,20,0.16); }
+
+/* Verified badge (SVG check in a small blue disc) */
+.verified-badge {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); color: #fff; margin-left: 6px; vertical-align: middle;
+}
+.verified-badge svg { display: block; }
+.person-name { display: inline-flex; align-items: center; }
+
+/* Icon chips (social style) */
+.icon-chip { display: flex; align-items: center; gap: 10px; }
+.icon-chip svg { flex-shrink: 0; }
+.icon-chip.active svg { color: #fff; }
+
+/* Consent row icon inline with title */
+.consent-title { display: flex; align-items: center; gap: 8px; }
+.consent-ico { display: inline-grid; place-items: center; color: var(--text-2); }
+.consent-row.on .consent-ico { color: var(--success); }
+.consent-check svg { display: block; }
+
+/* Warning note with inline icon */
+.warn-note { display: flex; align-items: flex-start; gap: 8px; }
+.warn-note svg { flex-shrink: 0; margin-top: 1px; }
+
+/* Meeting-spot inline (matches list + chat header) */
+.spot-inline { display: flex; align-items: center; gap: 5px; font-size: 12px; margin-top: 2px; }
+.spot-inline svg { flex-shrink: 0; }
+.match-chat-ico { color: var(--muted); display: grid; place-items: center; }
+
+/* Empty state artwork */
+.empty .empty-art { color: var(--brand); display: grid; place-items: center; margin: 6px auto 8px; opacity: 0.9; }
+
+/* Challenge / leaf artwork wrappers keep their SVG centered */
+.challenge-emoji svg, .leaf svg { display: inline-block; }
+.leaf { color: var(--accent); }
+.art-challenge { display: block; margin: 0 auto; }

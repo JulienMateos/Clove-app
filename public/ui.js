@@ -112,6 +112,17 @@ export function closeSheet() {
   else if (b) b.remove();
 }
 
+// Small check glyph (SVG) for completed steps — no emoji.
+function checkGlyph() {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  el.setAttribute('viewBox', '0 0 24 24');
+  el.setAttribute('width', '14'); el.setAttribute('height', '14');
+  el.setAttribute('fill', 'none'); el.setAttribute('stroke', 'currentColor');
+  el.setAttribute('stroke-width', '3'); el.setAttribute('stroke-linecap', 'round'); el.setAttribute('stroke-linejoin', 'round');
+  el.innerHTML = '<path d="M20 6L9 17l-5-5"/>';
+  return el;
+}
+
 // ---- Match flow progress stepper -----------------------------------------
 // Four dots representing: proximity → intérêt → défi → verdict.
 const STEP_ORDER = ['PENDING', 'INTEREST_WAIT', 'PHOTO_CHALLENGE', 'PHOTO_REVIEW', 'COMPLETED'];
@@ -130,7 +141,7 @@ export function matchStepper(status) {
     labels.map((label, i) => h('div', {
       class: 'step' + (i < active ? ' done' : '') + (i === active ? ' active' : ''),
     },
-      h('span', { class: 'step-dot' }, i < active ? '✓' : String(i + 1)),
+      h('span', { class: 'step-dot' }, i < active ? checkGlyph() : String(i + 1)),
       h('span', { class: 'step-label' }, label),
     ))
   );

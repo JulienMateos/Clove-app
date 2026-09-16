@@ -19,7 +19,7 @@ export const state = {
   session: null, // live match session view
   wsClose: null,
   onboardingStep: 0,
-  onboardingDraft: { username: '', gender: '', attraction: '', socialStyle: '', avatar: '🦊', bio: '', consent: { terms: false, location: false } },
+  onboardingDraft: { username: '', gender: '', attraction: '', socialStyle: '', avatar: 'a1', bio: '', consent: { terms: false, location: false } },
   // legal / safety sub-page (null = none)
   legalPage: null,
   // home local state
@@ -144,7 +144,7 @@ function applySessionUpdate(payload, { fromWs = false } = {}) {
     JSON.stringify(prev.meetingSpot) !== JSON.stringify(payload.meetingSpot);
 
   state.session = payload;
-  if (wasNew) toast('✨ Quelqu’un de compatible est tout près !');
+  if (wasNew) toast('Quelqu’un de compatible est tout près !');
   if (changed) render();
 }
 
@@ -158,7 +158,7 @@ function startWS() {
         state.messages.push(payload.message);
         render();
       } else {
-        toast('💬 Nouveau message');
+        toast('Nouveau message');
       }
     }
   });

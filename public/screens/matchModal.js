@@ -3,27 +3,7 @@ import { api } from '../api.js';
 import { state, render, closeSession } from '../app.js';
 import { safetyMenu } from '../safety.js';
 import { matchStepper, countdownRing, icon } from '../ui.js';
-
-// A little flavour glyph for each challenge (emoji renders on device; falls
-// back gracefully). The camera icon in the frame is always a crisp SVG.
-function challengeEmoji(txt = '') {
-  const t = txt.toLowerCase();
-  if (t.includes('chaussure')) return '👟';
-  if (t.includes('rouge')) return '🔴';
-  if (t.includes('animal')) return '🐾';
-  if (t.includes('horreur')) return '🎃';
-  if (t.includes('boxe')) return '🥊';
-  if (t.includes('commerç')) return '🛍️';
-  if (t.includes('cour')) return '🏃';
-  if (t.includes('danse')) return '💃';
-  if (t.includes('brocoli')) return '🥦';
-  if (t.includes('cri')) return '😱';
-  if (t.includes('plage')) return '🏖️';
-  if (t.includes('lion')) return '🦁';
-  if (t.includes('mange')) return '🍽️';
-  if (t.includes('nature')) return '🌿';
-  return '📸';
-}
+import { challengeArt, avatar, line } from '../art.js';
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -65,9 +45,9 @@ export function renderMatchModal(s) {
       h('div', { class: 'headline' }, 'Une étincelle à deux pas.'),
       h('p', { class: 'lead' }, 'Une personne compatible est juste à côté. Prêt·e à tenter un défi pour la rencontrer, là, maintenant ?'),
       h('div', { class: 'person-card' },
-        h('div', { class: 'avatar' }, s.other?.avatar || '👤'),
+        avatarTile(s.other?.avatar, 56),
         h('div', { class: 'person-meta' },
-          h('div', { class: 'person-name' }, `${s.other?.username || 'Anonyme'}${s.other?.verified ? ' ✓' : ''}`),
+          nameWithBadge(s.other?.username || 'Anonyme', s.other?.verified),
           h('div', { class: 'muted', style: { fontSize: '12px' } }, 'Profil dévoilé après votre rencontre')),
         h('div', { class: 'spacer' }),
         safetyMenu(s.other, { context: 'profile', onDone: () => closeSession() }),
@@ -81,7 +61,7 @@ export function renderMatchModal(s) {
 
   else if (status === 'INTEREST_WAIT') {
     inner.append(h('div', { class: 'center' },
-      h('div', { class: 'pulse-orb' }, h('div', { class: 'avatar big' }, s.other?.avatar || '👤')),
+      h('div', { class: 'pulse-orb' }, avatarTile(s.other?.avatar, 64)),
       h('div', { class: 'headline', style: { fontSize: '22px' } }, "En attente de l'autre…"),
       h('p', { class: 'lead' }, `Tu as dit oui. On attend que ${s.other?.username || 'la personne'} accepte aussi.`),
       h('button', { class: 'btn ghost', onClick: () => act(() => api.cancelSession(s.sessionId)) }, 'Annuler'),
@@ -118,7 +98,7 @@ export function renderMatchModal(s) {
     }
 
     inner.append(
-      h('div', { class: 'challenge-emoji' }, challengeEmoji(s.challenge)),
+      h('div', { class: 'challenge-emoji' }, challengeArt(s.challenge, 60)),
       header,
       frame,
     );
@@ -162,9 +142,9 @@ export function renderMatchModal(s) {
       h('div', { class: 'confetti-bar' }, h('i', {}), h('i', {}), h('i', {}), h('i', {}), h('i', {})),
       h('div', { class: 'headline', style: { fontSize: '32px' } }, "C'est un Match !"),
       h('div', { class: 'person-card center-card' },
-        h('div', { class: 'avatar big' }, s.other?.avatar || '👤'),
+        avatarTile(s.other?.avatar, 64),
         h('div', { class: 'person-meta', style: { textAlign: 'left' } },
-          h('div', { class: 'person-name', style: { fontSize: '18px' } }, `${s.other?.username}${s.other?.verified ? ' ✓' : ''}`),
+          nameWithBadge(s.other?.username, s.other?.verified, 18),
           s.other?.bio ? h('div', { class: 'muted', style: { fontSize: '13px' } }, s.other.bio) : null,
         ),
       ),
@@ -185,7 +165,7 @@ export function renderMatchModal(s) {
 
   else { // FAILED / CANCELLED
     inner.append(h('div', { class: 'center' },
-      h('div', { class: 'leaf' }, '🍃'),
+      h('div', { class: 'leaf' }, line('sparkStroke', 40)),
       h('div', { class: 'headline', style: { fontSize: '24px' } }, 'Ce sera pour une prochaine fois'),
       h('p', { class: 'lead' }, status === 'FAILED'
         ? "Pas d'étincelle cette fois — et c'est très bien. Aucun historique, on repart à neuf."
@@ -202,4 +182,16 @@ function frameImg(src) {
   if (src) f.append(h('img', { src, alt: 'photo' }));
   else f.append(h('span', {}, '—'));
   return f;
+}
+
+// Avatar tile wrapper (renders the SVG identity mark).
+function avatarTile(id, size = 56) {
+  return h('div', { class: 'avatar art' }, avatar(id, size));
+}
+
+// Username + verified badge (SVG check, no emoji).
+function nameWithBadge(name, verified, fontSize = 16) {
+  const el = h('div', { class: 'person-name', style: { fontSize: `${fontSize}px` } }, name || 'Anonyme');
+  if (verified) el.append(h('span', { class: 'verified-badge', title: 'Vérifié' }, line('check', 12)));
+  return el;
 }
