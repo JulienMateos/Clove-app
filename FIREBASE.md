@@ -41,6 +41,7 @@ L'ouverture d'une session est une transaction : une personne ne peut pas être d
    les Cloud Functions et le stockage des photos. Crée ensuite une **alerte de budget** (ex. 5 €)
    dans Google Cloud → *Facturation* → *Budgets et alertes*. Une alerte prévient, elle ne bloque pas.
 3. **Authentication** → *Commencer* → *Mode de connexion* → activer **Anonyme**.
+   Pour l'app iOS, active aussi **Apple** (voir `ios/README.md`, section « Se connecter avec Apple »).
 4. **Firestore Database** → *Créer une base* → emplacement **europe-west1** (ou `eur3`) → mode production.
 5. **Storage** → *Commencer* → emplacement **europe-west1** → mode production.
    Le quota gratuit de Storage n'existe qu'aux États-Unis (`us-central1`, `us-east1`, `us-west1`).
@@ -71,7 +72,8 @@ Blaze inclut des quotas gratuits ; au-delà, c'est à l'usage :
 | Cloud Functions | 2 M d'appels / mois | 1 appel toutes les 15 s en mode « full » |
 | Cloud Storage | 5 Go + 100 Go de téléchargement / mois, **seulement aux États-Unis** ; en Europe, facturé dès le 1er Go | photos JPEG ≤ 1400 px (~200-400 Ko) |
 | Cloud Scheduler | 3 tâches / mois par compte de facturation | 1 tâche (`sweepTimeouts`, chaque minute) |
-| Authentication anonyme, Hosting | gratuits à ce volume | — |
+| Authentication (anonyme + Apple) | gratuit jusqu'à 50 000 utilisateurs actifs / mois | — |
+| Hosting | gratuit à ce volume | — |
 
 Pour des tests entre amis, la facture attendue est de 0 € (ou quelques centimes avec les photos en Europe).
 
@@ -94,4 +96,7 @@ Le SDK Firebase est embarqué dans `web/vendor/firebase/` (pas de CDN) ; `npm ru
   mais rien ne l'appelle. **Apple exige la suppression de compte dans l'app** pour la publication.
 - Modifier l'empreinte depuis le profil n'appelle pas `CloveAPI` : le serveur ne la voit qu'au prochain `saveProfile`.
 - Pas de notifications push : une demande n'arrive que si l'app est ouverte.
-- Le compte est anonyme et lié à l'appareil : changer de téléphone = nouveau profil.
+- Sur le web, le compte reste anonyme et lié au navigateur. Dans l'app iOS, il est rattaché à
+  « Se connecter avec Apple » et suit la personne d'un téléphone à l'autre.
+- Le design est prévu pour les écrans d'environ 400 px de large : sur un iPhone SE de 1re génération
+  (320 px), le bas de certains écrans est coupé.
