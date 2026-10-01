@@ -66,3 +66,6 @@ window.CloveAPI.setAvailability = (p) => fetch('/api/availability', {method:'POS
 
 ## Si une modif visuelle est vraiment nécessaire
 Ne pas éditer `index.html`. La source est `design/Clove iOS v5.dc.html` (ouvrable dans un navigateur avec `support.js` + `ios-frame.jsx` à côté). Les docs `design/README.md` et `design/TRANSITIONS.md` décrivent chaque écran et transition.
+
+**Recompiler** après une modif de la source : `python3 scripts/build-front.py` régénère `web/index.html`
+(`--check` vérifie qu'il est à jour). Sur une source inchangée, le résultat est identique octet pour octet.

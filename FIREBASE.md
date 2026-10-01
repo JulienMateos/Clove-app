@@ -14,7 +14,11 @@ Le front `web/index.html` n'est pas modifié. `web/clove-api.js` le relie à Fir
 | `alert` | `alert` | — |
 | `saveEmergencyContact` | `saveEmergencyContact` | — |
 | (démarrage) | `listMatches` | `matches {list}` |
-| `deleteAccount`, `getOtherPhoto` | idem | — (prêts, pas encore appelés par l'UI) |
+| (démarrage) | `getProfile` | `profile` — on se souvient de toi : l'app reprend sur le radar |
+| `saveShape` (Profil → Modifier mon empreinte) | `updateShape` | — (refusé avant la date affichée) |
+| `listBlocked`, `unblock` (Profil → Personnes bloquées) | idem | — |
+| `deleteAccount` (Profil → Supprimer mon compte) | idem | — (efface aussi le compte de connexion) |
+| `getOtherPhoto` | idem | — (prêt, pas encore affiché par l'UI) |
 
 Chaque événement est transmis à `window.__cloveEvent` puis effacé. Les clients ne peuvent lire
 **que** leur propre boîte d'événements : tout le reste (profils, positions, sessions, photos) est
@@ -92,9 +96,6 @@ Le SDK Firebase est embarqué dans `web/vendor/firebase/` (pas de CDN) ; `npm ru
 
 - L'UI est écrite du point de vue « lui » : la personne qui décide en premier voit « à elle de décider »
   avant son écran de revue. « Emma » reste codé en dur dans certains textes (voir `CLAUDE.md`).
-- Le bouton « Supprimer mon compte » de l'UI n'a pas d'action : `CloveAPI.deleteAccount()` est prêt
-  mais rien ne l'appelle. **Apple exige la suppression de compte dans l'app** pour la publication.
-- Modifier l'empreinte depuis le profil n'appelle pas `CloveAPI` : le serveur ne la voit qu'au prochain `saveProfile`.
 - Pas de notifications push : une demande n'arrive que si l'app est ouverte.
 - Sur le web, le compte reste anonyme et lié au navigateur. Dans l'app iOS, il est rattaché à
   « Se connecter avec Apple » et suit la personne d'un téléphone à l'autre.

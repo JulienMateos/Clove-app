@@ -151,7 +151,17 @@ assert.deepEqual(await nextEvent(ines, 'failed'), { by: 'her' });
 // ── Safety ──
 assert.equal((await tom.call('report', { name: 'ZOÉ', reasonIndex: 2 })).reported, true);
 assert.equal((await admin.doc(`users/${zoe.uid}`).get()).get('open_reports'), 1);
-await emma.call('saveEmergencyContact', { name: 'Maman', phone: '+33 6 12 34 56 78' });
+await emma.fails('saveEmergencyContact', { name: 'Maman', phone: '+33 1 23 45 67 89' }, 'invalid-argument'); // fixe, pas un mobile
+await emma.fails('saveEmergencyContact', { name: 'Maman', phone: '+3361234' }, 'invalid-argument');
+await emma.call('saveEmergencyContact', { name: 'Maman', phone: '+33612345678' });
+// Personnes bloquées : Tom a signalé Zoé
+const bl = await tom.call('listBlocked');
+assert.deepEqual(bl.list.map((b) => b.name), ['Zoé']);
+assert.match(bl.list[0].when, /^BLOQUÉ·E LE /);
+assert.deepEqual((await zoe.call('listBlocked')).list, [], 'only the one who blocked sees it');
+await zoe.fails('unblock', { id: bl.list[0].id }, 'not-found');
+await tom.call('unblock', { id: bl.list[0].id });
+assert.deepEqual((await tom.call('listBlocked')).list, []);
 assert.equal((await emma.call('alert', { type: 'danger' })).ok, true);
 await emma.fails('alert', { type: 'boom' }, 'invalid-argument');
 
@@ -160,6 +170,26 @@ const r = await emma.call('saveProfile', {
   firstName: 'Emma', birth: '1996-05-04', gender: 'femme', attraction: 'homme', traits: Array(12).fill(0.9), hour: 19, vol: 2, el: 1,
 });
 assert.equal(r.shapeLocked, true);
+assert.ok(r.shapeEditedAt > 0);
+const locked = await emma.call('updateShape', { traits: Array(12).fill(0.2), hour: 19, vol: 2, el: 1 });
+assert.equal(locked.shapeLocked, true, 'profile edit refused before 30 days');
+assert.equal(locked.shapeEditableAt - locked.shapeEditedAt, 30 * 86400000);
+await admin.doc(`users/${emma.uid}`).update({ shape_edited_at: Date.now() - 31 * 86400000 });
+const okShape = await emma.call('updateShape', { traits: Array(12).fill(0.2), hour: 19, vol: 2, el: 1 });
+assert.equal(okShape.shapeLocked, false);
+
+// ── On se souvient de toi ──
+await emma.call('saveProfile', {
+  firstName: 'Emma', birth: '1996-05-04', gender: 'femme', attraction: 'homme', traits: Array(12).fill(0.2), hour: 19, vol: 2, el: 1,
+  extras: { avatar: 2, sig: [[10, 20], [30, 40]], grain: 1, motifs: [3], social: 'extra', radius: 300 },
+});
+const prof = (await emma.call('getProfile')).profile;
+assert.equal(prof.firstName, 'Emma');
+assert.deepEqual(prof.traits, Array(12).fill(0.2));
+assert.equal(prof.extras.avatar, 2);
+assert.equal(prof.emergency.phone, '+33612345678');
+assert.match(prof.photo, /^data:image\/png;base64,/);
+assert.equal((await anon.call('getProfile')).profile, null);
 
 // ── Account deletion ──
 await max.call('deleteAccount');

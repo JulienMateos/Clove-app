@@ -16,6 +16,7 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
+import { getAuth } from 'firebase-admin/auth';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
@@ -98,6 +99,36 @@ function callable(handler, { needProfile = true } = {}) {
 }
 
 // ---- Profile -------------------------------------------------------------
+function readShape(d) {
+  const traits = d.traits;
+  if (!Array.isArray(traits) || traits.length !== 12 || !traits.every((t) => num(t) != null && t >= 0 && t <= 1)) {
+    bad('Empreinte invalide.');
+  }
+  return { traits, hour: num(d.hour), vol: num(d.vol), el: num(d.el) };
+}
+
+// Choix visuels de l'onboarding (avatar, signature, grain…), gardés pour reprendre l'app telle quelle.
+function readExtras(x) {
+  if (!x || typeof x !== 'object') return null;
+  const int = (v, max) => (Number.isInteger(v) && v >= 0 && v <= max ? v : 0);
+  const sig = Array.isArray(x.sig) ? x.sig.slice(0, 120)
+    .filter((p) => Array.isArray(p) && p.length === 2 && p.every((v) => num(v) != null))
+    .map(([a, b]) => ({ x: Math.round(a * 10) / 10, y: Math.round(b * 10) / 10 })) : []; // Firestore : pas de tableaux imbriqués
+  const motifs = Array.isArray(x.motifs) ? x.motifs.filter((v) => Number.isInteger(v) && v >= 0 && v < 4).slice(0, 4) : [];
+  return {
+    avatar: int(x.avatar, 3), grain: int(x.grain, 3), sig, motifs,
+    social: ['extra', 'intro'].includes(x.social) ? x.social : '',
+    radius: num(x.radius) != null ? Math.min(Math.max(x.radius, 50), MAX_RADIUS_M) : DEFAULT_RADIUS_M,
+  };
+}
+
+// Numéro du contact de confiance : international, et un mobile pour la France (le SMS d'alerte doit partir).
+export function validPhone(phone) {
+  if (!/^\+[1-9]\d{7,14}$/.test(phone)) return false;
+  if (phone.startsWith('+33')) return /^\+33[67]\d{8}$/.test(phone);
+  return true;
+}
+
 export const saveProfile = callable(async (d, uid) => {
   const firstName = String(d.firstName || '').trim().slice(0, 40);
   const lastName = String(d.lastName || '').trim().slice(0, 60);
@@ -109,10 +140,8 @@ export const saveProfile = callable(async (d, uid) => {
   if (age < MIN_AGE) bad(`Réservé aux ${MIN_AGE} ans et plus.`);
   if (!Object.values(GENDER).includes(d.gender)) bad('Genre invalide.');
   if (!Object.values(ATTRACTION).includes(d.attraction)) bad('Attirance invalide.');
-  const traits = d.traits;
-  if (!Array.isArray(traits) || traits.length !== 12 || !traits.every((t) => num(t) != null && t >= 0 && t <= 1)) {
-    bad('Empreinte invalide.');
-  }
+  const shape = readShape(d);
+  const extras = readExtras(d.extras);
   if (d.photo) {
     const check = moderatePhoto(d.photo);
     if (!check.ok) bad(check.reason);
@@ -125,9 +154,9 @@ export const saveProfile = callable(async (d, uid) => {
     gender: d.gender, attraction: d.attraction, updated_at: Date.now(),
   };
   if (d.photo) fields.photo_path = await savePhoto(uid, d.photo, 'profile');
+  if (extras) fields.extras = extras;
 
   // The shape ("empreinte") can only change once every 30 days.
-  const shape = { traits, hour: num(d.hour), vol: num(d.vol), el: num(d.el) };
   let shapeLocked = false;
   // `existing.shape` absent = profil d'une ancienne version de Clove : on le reprend comme un nouveau.
   if (!existing || !existing.shape) {
@@ -147,8 +176,37 @@ export const saveProfile = callable(async (d, uid) => {
     });
   }
   const editedAt = fields.shape_edited_at || existing?.shape_edited_at || Date.now();
-  return { shapeLocked, shapeEditableAt: editedAt + SHAPE_COOLDOWN_MS };
+  return { shapeLocked, shapeEditedAt: editedAt, shapeEditableAt: editedAt + SHAPE_COOLDOWN_MS };
 }, { needProfile: false });
+
+// Modifier l'empreinte depuis le profil : une fois tous les 30 jours, date affichée = date appliquée.
+export const updateShape = callable(async (d, uid, user) => {
+  const shape = readShape(d);
+  const editedAt = user.shape_edited_at || 0;
+  if (Date.now() - editedAt < SHAPE_COOLDOWN_MS) {
+    return { shapeLocked: true, shapeEditedAt: editedAt, shapeEditableAt: editedAt + SHAPE_COOLDOWN_MS };
+  }
+  const now = Date.now();
+  await userRef(uid).update({ shape, shape_edited_at: now });
+  return { shapeLocked: false, shapeEditedAt: now, shapeEditableAt: now + SHAPE_COOLDOWN_MS };
+});
+
+// Au lancement : le profil déjà enregistré, pour reprendre l'app sans refaire l'onboarding.
+// C'est la personne elle-même qui le lit (jamais un autre utilisateur).
+export const getProfile = callable(async (d, uid) => {
+  const snap = await userRef(uid).get();
+  const u = snap.exists ? snap.data() : null;
+  if (!u || !u.first_name || !u.shape) return { profile: null };
+  const photo = u.photo_path ? await readPhoto(u.photo_path).catch(() => null) : null;
+  return {
+    profile: {
+      firstName: u.first_name, lastName: u.last_name || '', birth: u.birth, gender: u.gender, attraction: u.attraction,
+      traits: u.shape.traits, hour: u.shape.hour, vol: u.shape.vol, el: u.shape.el,
+      shapeEditedAt: u.shape_edited_at || null, emergency: u.emergency || null, photo,
+      extras: u.extras ? { ...u.extras, sig: (u.extras.sig || []).map((p) => [p.x, p.y]) } : null,
+    },
+  };
+}, { needProfile: false }); // appelé au démarrage, avant l’onboarding aussi
 
 export const deleteAccount = callable(async (d, uid) => {
   await withSession(uid, (tx, s) => fail(tx, s, uid, 'account-deleted')).catch(() => {});
@@ -164,6 +222,7 @@ export const deleteAccount = callable(async (d, uid) => {
   await batch.commit();
   await db.recursiveDelete(userRef(uid));
   await bucket().deleteFiles({ prefix: `photos/${uid}/` });
+  await getAuth().deleteUser(uid).catch(() => {}); // compte de connexion (anonyme ou Apple)
   return { deleted: true };
 });
 
@@ -446,10 +505,35 @@ export const report = callable(async (d, uid) => {
     });
     tx.update(userRef(reportedId), { open_reports: FieldValue.increment(1) });
     // Reporting also blocks: they will never be proposed to each other again.
-    tx.set(pairRef(uid, reportedId), { blocked: true, blocked_by: uid }, { merge: true });
+    tx.set(pairRef(uid, reportedId), { blocked: true, blocked_by: uid, blocked_at: Date.now() }, { merge: true });
     if (!TERMINAL.has(live.status)) fail(tx, { ...s, ...live }, uid, 'reported');
   });
   return { reported: true, id: ref.id };
+});
+
+// Profil → Personnes bloquées : celles que j'ai signalées (et donc bloquées).
+export const listBlocked = callable(async (d, uid) => {
+  const snap = await db.collection('pairs').where('blocked_by', '==', uid).where('blocked', '==', true).get();
+  const list = await Promise.all(snap.docs.map(async (doc) => {
+    const p = doc.data();
+    const other = p.users.find((u) => u !== uid);
+    const o = other ? await userRef(other).get() : null;
+    const at = p.blocked_at || p.created_at;
+    return {
+      id: doc.id, name: o?.exists ? o.data().first_name : 'Compte supprimé', at,
+      when: at ? 'BLOQUÉ·E LE ' + new Date(at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }).toUpperCase() : '',
+    };
+  }));
+  return { list: list.sort((a, b) => (b.at || 0) - (a.at || 0)) };
+});
+
+// Débloquer : la personne n'est plus bloquée, mais une paire déjà rencontrée n'est jamais reproposée.
+export const unblock = callable(async (d, uid) => {
+  const ref = db.doc(`pairs/${String(d.id || '')}`);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data().blocked_by !== uid) throw new HttpsError('not-found', 'introuvable');
+  await ref.update({ blocked: false, blocked_by: null, unblocked_at: Date.now() });
+  return { ok: true };
 });
 
 export const alert = callable(async (d, uid, user) => {
@@ -478,7 +562,7 @@ export const saveEmergencyContact = callable(async (d, uid) => {
   const name = String(d.name || '').trim().slice(0, 60);
   const phone = String(d.phone || '').trim();
   if (!name) bad('nom requis');
-  if (!/^\+?[\d\s.()-]{6,20}$/.test(phone)) bad('téléphone invalide');
+  if (!validPhone(phone)) bad('Numéro de mobile invalide (format international, ex. +33612345678).');
   await userRef(uid).update({ emergency: { name, phone } });
   return { ok: true };
 });

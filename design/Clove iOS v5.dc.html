@@ -708,9 +708,9 @@ input[type=range]{accent-color:#E24B0B}
 <sc-if value="{{ showLockNote }}" hint-placeholder-val="{{ false }}"><p style="margin:0;padding:10px 12px;border:3px solid #10182E;background:#EFE4CE;font:600 13px/1.4 Archivo,sans-serif;color:#10182E;animation:cloveRise .25s ease">{{ shapeEditNote }}</p></sc-if>
 </div>
 <div style="margin-top:26px;display:flex;flex-direction:column;align-items:flex-start;gap:14px">
-<button style="padding:0;background:transparent;border:0;font:600 14px Archivo,sans-serif;color:#10182E;cursor:pointer">Personnes bloquées</button>
-<button style="padding:0;background:transparent;border:0;font:600 14px Archivo,sans-serif;color:#10182E;cursor:pointer">Conditions &amp; confidentialité</button>
-<button style="padding:0;background:transparent;border:0;font:600 14px Archivo,sans-serif;color:#E24B0B;cursor:pointer">Supprimer mon compte</button>
+<button onClick="{{ openBlocked }}" style="padding:0;background:transparent;border:0;font:600 14px Archivo,sans-serif;color:#10182E;cursor:pointer">Personnes bloquées</button>
+<button onClick="{{ openLegal }}" style="padding:0;background:transparent;border:0;font:600 14px Archivo,sans-serif;color:#10182E;cursor:pointer">Conditions &amp; confidentialité</button>
+<button onClick="{{ openDelete }}" style="padding:0;background:transparent;border:0;font:600 14px Archivo,sans-serif;color:#E24B0B;cursor:pointer">Supprimer mon compte</button>
 </div>
 </div>
 </sc-if>
@@ -724,9 +724,19 @@ input[type=range]{accent-color:#E24B0B}
 <h2 style="margin:0;font:900 30px/.95 Archivo,sans-serif;letter-spacing:-.04em">Qui prévenir<br>si ça tourne mal ?</h2>
 <p style="margin:0;font:500 14px/1.4 Archivo,sans-serif;color:rgba(16,24,46,.75)">Ton contact super-héros. Il ne reçoit rien tant que tu n’appuies pas.</p>
 <input value="{{ heroName }}" onChange="{{ onHeroName }}" placeholder="Prénom (ex. Maman, Sam…)" style="margin-top:8px;padding:16px 14px;border:3px solid #10182E;background:#fff;font:700 17px Archivo,sans-serif;color:#10182E;outline:none">
-<input value="{{ heroPhone }}" onChange="{{ onHeroPhone }}" placeholder="+33 6 12 34 56 78" type="tel" style="padding:16px 14px;border:3px solid #10182E;background:#fff;font:600 17px 'IBM Plex Mono',monospace;color:#10182E;outline:none">
+<div style="display:flex;gap:8px">
+<label style="position:relative;flex:none;width:104px;display:flex;align-items:center;justify-content:center;gap:6px;border:3px solid #10182E;background:#EFE4CE;font:700 15px 'IBM Plex Mono',monospace;color:#10182E;cursor:pointer">
+<span>{{ heroCcShown }}</span><span style="font-size:10px">▼</span>
+<select value="{{ heroCc }}" onChange="{{ onHeroCc }}" aria-label="Indicatif du pays" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px">
+<sc-for list="{{ countries }}" as="co" hint-placeholder-count="3">
+<option value="{{ co.value }}">{{ co.label }}</option>
+</sc-for>
+</select>
+</label>
+<input value="{{ heroPhone }}" onChange="{{ onHeroPhone }}" placeholder="{{ heroPlaceholder }}" type="tel" inputmode="tel" autocomplete="tel-national" style="flex:1;min-width:0;padding:16px 14px;border:3px solid #10182E;background:#fff;font:600 17px 'IBM Plex Mono',monospace;color:#10182E;outline:none">
+</div>
 <sc-if value="{{ phoneBad }}" hint-placeholder-val="{{ false }}">
-<span style="font:700 10.5px 'IBM Plex Mono',monospace;letter-spacing:.08em;color:#E24B0B">CE N’EST PAS UN NUMÉRO VALIDE · EX. +33 6 12 34 56 78</span>
+<span style="font:700 10.5px 'IBM Plex Mono',monospace;letter-spacing:.08em;color:#E24B0B">CE N’EST PAS UN NUMÉRO DE MOBILE VALIDE · EX. 06 12 34 56 78</span>
 </sc-if>
 <button onClick="{{ saveHero }}" style="margin-top:8px;padding:18px;background:{{ heroSaveBg }};color:#F4F0E8;border:3px solid #10182E;box-shadow:4px 4px 0 #0F6B60;font:900 17px Archivo,sans-serif;cursor:pointer">ACTIVER LA SÉCURITÉ</button>
 </div>
@@ -773,7 +783,7 @@ input[type=range]{accent-color:#E24B0B}
 </span>
 </button>
 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:4px">
-<span style="font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,24,46,.6)">CONTACT · {{ heroNameUp }} · {{ heroPhone }}</span>
+<span style="font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,24,46,.6)">CONTACT · {{ heroNameUp }} · {{ heroPhoneShown }}</span>
 <button onClick="{{ editHero }}" style="padding:0;background:transparent;border:0;border-bottom:2px solid #10182E;font:700 12px Archivo,sans-serif;color:#10182E;cursor:pointer">Modifier</button>
 </div>
 <p style="margin:0;font:500 11.5px/1.4 Archivo,sans-serif;color:rgba(16,24,46,.62)">Chaque alerte est enregistrée dans nos données. Le profil concerné est signalé et étudié par notre modération, sans en être informé.</p>
@@ -808,10 +818,12 @@ input[type=range]{accent-color:#E24B0B}
 <p style="margin:0;font:700 10px/1.6 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#0F6B60">{{ reportLine }}</p>
 <div style="flex:1"></div>
 <sc-if value="{{ isDanger }}" hint-placeholder-val="{{ false }}">
+<button onClick="{{ callHero }}" style="padding:16px;background:#E24B0B;color:#fff;border:3px solid #10182E;box-shadow:4px 4px 0 #10182E;font:900 16px Archivo,sans-serif;cursor:pointer">APPELER {{ heroNameUp }}</button>
 <div style="display:flex;gap:10px">
-<button onClick="{{ endAlert }}" style="flex:1;padding:15px 6px;background:#F4F0E8;border:3px solid #10182E;font:700 13px Archivo,sans-serif;cursor:pointer;color:#10182E">Raccrocher</button>
-<button onClick="{{ call112 }}" style="flex:1.3;padding:17px 6px;background:#10182E;color:#F4F0E8;border:3px solid #10182E;box-shadow:4px 4px 0 #E24B0B;font:900 16px Archivo,sans-serif;cursor:pointer">APPELER LE 112</button>
+<button onClick="{{ call17 }}" style="flex:1;padding:17px 6px;background:#10182E;color:#F4F0E8;border:3px solid #10182E;box-shadow:4px 4px 0 #E24B0B;font:900 16px Archivo,sans-serif;cursor:pointer">17 · POLICE</button>
+<button onClick="{{ call112 }}" style="flex:1;padding:17px 6px;background:#10182E;color:#F4F0E8;border:3px solid #10182E;box-shadow:4px 4px 0 #E24B0B;font:900 16px Archivo,sans-serif;cursor:pointer">112 · URGENCES</button>
 </div>
+<button onClick="{{ endAlert }}" style="align-self:flex-start;padding:0 0 3px;background:transparent;border:0;border-bottom:2px solid #10182E;font:700 13px Archivo,sans-serif;cursor:pointer;color:#10182E">Terminer l’alerte</button>
 </sc-if>
 <sc-if value="{{ isAwk }}" hint-placeholder-val="{{ false }}">
 <button onClick="{{ endAlert }}" style="align-self:flex-start;padding:16px 30px;background:#123C96;color:#fff;border:3px solid #10182E;box-shadow:4px 4px 0 #10182E;font:800 16px Archivo,sans-serif;cursor:pointer">TERMINÉ</button>
@@ -1118,6 +1130,68 @@ input[type=range]{accent-color:#E24B0B}
 </div>
 </sc-if>
 
+<sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:60;display:flex;flex-direction:column;background:rgba(16,24,46,.55)">
+<div onClick="{{ closeSheet }}" style="flex:1;min-height:80px"></div>
+<div style="max-height:78%;overflow:auto;background:#F4F0E8;border-top:4px solid #10182E;padding:18px 20px 40px;display:flex;flex-direction:column;gap:12px;animation:cloveRise .28s ease">
+
+<sc-if value="{{ sheetBlocked }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+<div>
+<span style="display:inline-block;padding:4px 8px;background:#10182E;color:#F4F0E8;font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.16em">SÉCURITÉ</span>
+<h3 style="margin:8px 0 0;font:900 30px/.9 Archivo,sans-serif;letter-spacing:-.04em">Personnes bloquées</h3>
+</div>
+<button onClick="{{ closeSheet }}" style="width:40px;height:40px;flex:none;background:#fff;border:3px solid #10182E;font:900 18px Archivo,sans-serif;color:#10182E;cursor:pointer">×</button>
+</div>
+<p style="margin:0;font:500 13.5px/1.4 Archivo,sans-serif;color:#10182E">Les personnes que tu as signalées ne te sont plus jamais proposées sur le radar. Elles ne savent pas que tu les as bloquées.</p>
+<sc-if value="{{ blockedLoading }}" hint-placeholder-val="{{ false }}">
+<span style="font:700 10.5px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,24,46,.6)">CHARGEMENT…</span>
+</sc-if>
+<sc-if value="{{ blockedEmpty }}" hint-placeholder-val="{{ false }}">
+<p style="margin:0;padding:14px;border:3px solid #10182E;background:#fff;font:600 14px Archivo,sans-serif;color:#10182E">Personne pour l’instant.</p>
+</sc-if>
+<div style="display:flex;flex-direction:column;border:3px solid #10182E;background:#fff">
+<sc-for list="{{ blockedList }}" as="b" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-bottom:2px solid #EFE4CE">
+<span style="display:block">
+<span style="display:block;font:900 17px Archivo,sans-serif;color:#10182E">{{ b.name }}</span>
+<span style="display:block;margin-top:2px;font:700 9.5px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,24,46,.6)">{{ b.when }}</span>
+</span>
+<button onClick="{{ b.unblock }}" style="padding:0 0 3px;background:transparent;border:0;border-bottom:2px solid #10182E;font:700 13px Archivo,sans-serif;color:#10182E;cursor:pointer">Débloquer</button>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ sheetLegal }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+<div>
+<span style="display:inline-block;padding:4px 8px;background:#123C96;color:#fff;font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.16em">TES DONNÉES</span>
+<h3 style="margin:8px 0 0;font:900 30px/.9 Archivo,sans-serif;letter-spacing:-.04em">Conditions &amp; confidentialité</h3>
+</div>
+<button onClick="{{ closeSheet }}" style="width:40px;height:40px;flex:none;background:#fff;border:3px solid #10182E;font:900 18px Archivo,sans-serif;color:#10182E;cursor:pointer">×</button>
+</div>
+<div style="display:flex;flex-direction:column;border:3px solid #10182E;background:#fff">
+<div style="padding:12px;border-bottom:2px solid #EFE4CE"><span style="display:block;font:800 15px Archivo,sans-serif;color:#10182E">Ce qu’on garde</span><span style="display:block;margin-top:4px;font:500 13px/1.45 Archivo,sans-serif;color:rgba(16,24,46,.8)">Prénom, nom, date de naissance, genre et attirance, ton empreinte, ta photo, ton contact de confiance. Ta position seulement quand le radar est allumé, jamais en arrière-plan.</span></div>
+<div style="padding:12px;border-bottom:2px solid #EFE4CE"><span style="display:block;font:800 15px Archivo,sans-serif;color:#10182E">Ce que les autres voient</span><span style="display:block;margin-top:4px;font:500 13px/1.45 Archivo,sans-serif;color:rgba(16,24,46,.8)">Ton prénom et ton âge. Rien d’autre : pas de profil public, pas de photo tant que vous ne vous êtes pas choisis l’un l’autre.</span></div>
+<div style="padding:12px;border-bottom:2px solid #EFE4CE"><span style="display:block;font:800 15px Archivo,sans-serif;color:#10182E">Photos des défis</span><span style="display:block;margin-top:4px;font:500 13px/1.45 Archivo,sans-serif;color:rgba(16,24,46,.8)">Elle voit ta photo en premier. Si elle refuse, tu ne vois jamais la sienne.</span></div>
+<div style="padding:12px;border-bottom:2px solid #EFE4CE"><span style="display:block;font:800 15px Archivo,sans-serif;color:#10182E">Sécurité</span><span style="display:block;margin-top:4px;font:500 13px/1.45 Archivo,sans-serif;color:rgba(16,24,46,.8)">Les alertes et signalements sont conservés pour la modération. Ton contact de confiance ne reçoit rien tant que tu n’appuies pas.</span></div>
+<div style="padding:12px"><span style="display:block;font:800 15px Archivo,sans-serif;color:#10182E">Tes droits</span><span style="display:block;margin-top:4px;font:500 13px/1.45 Archivo,sans-serif;color:rgba(16,24,46,.8)">Pas de publicité, pas de revente. Tu peux supprimer ton compte et toutes tes données à tout moment depuis ton profil. Réservé aux 17 ans et plus.</span></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ sheetDelete }}" hint-placeholder-val="{{ false }}">
+<span style="align-self:flex-start;padding:4px 8px;background:#E24B0B;color:#fff;font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.16em">IRRÉVERSIBLE</span>
+<h3 style="margin:0;font:900 36px/.9 Archivo,sans-serif;letter-spacing:-.045em">Supprimer<br>ton compte ?</h3>
+<p style="margin:0;font:500 14px/1.4 Archivo,sans-serif;color:#10182E;text-wrap:pretty">Ton profil, ton empreinte, tes photos, tes matchs et ton contact de confiance sont effacés tout de suite. On ne peut pas revenir en arrière.</p>
+<button onClick="{{ deleteAccount }}" style="margin-top:6px;padding:17px;background:#E24B0B;color:#fff;border:3px solid #10182E;box-shadow:4px 4px 0 #10182E;font:900 16px Archivo,sans-serif;cursor:pointer">{{ deleteLabel }}</button>
+<button onClick="{{ closeSheet }}" style="padding:15px;background:#F4F0E8;border:3px solid #10182E;font:800 15px Archivo,sans-serif;color:#10182E;cursor:pointer">Garder mon compte</button>
+</sc-if>
+
+</div>
+</div>
+</sc-if>
+
 <sc-if value="{{ reportOpen }}" hint-placeholder-val="{{ false }}">
 <div style="position:absolute;inset:0;z-index:60;display:flex;flex-direction:column;background:rgba(16,24,46,.55)">
 <div onClick="{{ closeReport }}" style="flex:1;min-height:80px"></div>
@@ -1166,6 +1240,42 @@ const AVATARS=[
 ];
 const DEFIS=[['TROUVEZ UN','OBJET','ROUGE','ET SHOOTEZ-LE.'],['PHOTOGRAPHIEZ','UN','CHIEN','QUI PASSE.'],['TROUVEZ UNE','LETTRE','C','SUR UNE ENSEIGNE.'],['SHOOTEZ LE','PLUS','PETIT','OBJET POSSIBLE.'],['TROUVEZ UN','','CŒUR','CACHÉ DANS LA RUE.'],['SHOOTEZ UNE','FENÊTRE','FLEURIE','PRÈS DE VOUS.'],['TROUVEZ UN','NOMBRE','7','QUELQUE PART.']];
 const TILTS=['-2deg','1.5deg','-1deg','2.5deg'];
+// Écrans fixes : pas d'animation de couleurs (bandes, transitions, battements). ?motion=1 pour les revoir.
+const STILL=!(typeof location!=='undefined' && /[?&]motion=1/.test(location.search));
+// Indicatifs proposés pour le contact de confiance. n = chiffres du numéro national (sans le 0 initial),
+// m = début d'un numéro de mobile (le SMS d'alerte doit pouvoir partir).
+const COUNTRIES=[
+  {c:'+33',f:'🇫🇷',l:'France',n:[9],m:/^[67]/},{c:'+32',f:'🇧🇪',l:'Belgique',n:[9],m:/^4/},{c:'+41',f:'🇨🇭',l:'Suisse',n:[9],m:/^7/},
+  {c:'+352',f:'🇱🇺',l:'Luxembourg',n:[9],m:/^6/},{c:'+377',f:'🇲🇨',l:'Monaco',n:[8,9],m:/^[46]/},{c:'+1',f:'🇨🇦',l:'Canada / États-Unis',n:[10],m:/^[2-9]/},
+  {c:'+34',f:'🇪🇸',l:'Espagne',n:[9],m:/^[67]/},{c:'+39',f:'🇮🇹',l:'Italie',n:[9,10],m:/^3/},{c:'+49',f:'🇩🇪',l:'Allemagne',n:[10,11],m:/^1[5-7]/},
+  {c:'+44',f:'🇬🇧',l:'Royaume-Uni',n:[10],m:/^7/},{c:'+351',f:'🇵🇹',l:'Portugal',n:[9],m:/^9/},{c:'+31',f:'🇳🇱',l:'Pays-Bas',n:[9],m:/^6/},
+  {c:'+212',f:'🇲🇦',l:'Maroc',n:[9],m:/^[67]/},{c:'+213',f:'🇩🇿',l:'Algérie',n:[9],m:/^[567]/},{c:'+216',f:'🇹🇳',l:'Tunisie',n:[8],m:/^[2459]/},
+  {c:'+221',f:'🇸🇳',l:'Sénégal',n:[9],m:/^7/},{c:'+225',f:'🇨🇮',l:'Côte d’Ivoire',n:[10],m:/^0[157]/},{c:'+262',f:'🇷🇪',l:'La Réunion / Mayotte',n:[9],m:/^6/},
+  {c:'+590',f:'🇬🇵',l:'Guadeloupe',n:[9],m:/^6/},{c:'+596',f:'🇲🇶',l:'Martinique',n:[9],m:/^6/},{c:'+594',f:'🇬🇫',l:'Guyane',n:[9],m:/^6/},
+  {c:'+687',f:'🇳🇨',l:'Nouvelle-Calédonie',n:[6],m:/^[5-9]/},{c:'+689',f:'🇵🇫',l:'Polynésie française',n:[8],m:/^8/},
+];
+// Numéro national saisi → numéro international vérifié (+33612345678), ou null s'il n'est pas valide.
+function phoneE164(cc,nat){ let raw=String(nat||'').trim();
+  if(/^(\+|00)/.test(raw)){ const sp=splitPhone('+'+raw.replace(/[^\d]/g,'').replace(/^00/,'')); cc=sp.cc; raw=sp.nat; } // « +33 6… » tapé en entier
+  const C=COUNTRIES.find(x=>x.c===cc); if(!C) return null;
+  let d=raw.replace(/[^\d]/g,''); if(cc!=='+225') d=d.replace(/^0/,'');
+  if(!C.n.includes(d.length) || !C.m.test(d)) return null; return cc+d; }
+function splitPhone(e){ const s=String(e||''); const C=COUNTRIES.slice().sort((a,b)=>b.c.length-a.c.length).find(x=>s.startsWith(x.c));
+  if(!C) return {cc:'+33', nat:s}; const d=s.slice(C.c.length); return {cc:C.c, nat:(C.c==='+33'?'0':'')+d.replace(/(\d)(?=(\d{2})+$)/g,'$1 ')}; }
+function smsUrl(to,body){ const ios=typeof navigator!=='undefined' && /iP(hone|ad|od)|Macintosh/.test(navigator.userAgent);
+  return 'sms:'+to+(ios?'&':'?')+'body='+encodeURIComponent(body); }
+// Image pour un style CSS. Le moteur de rendu coupe les styles sur « ; » : une photo en data:image/jpeg;base64,…
+// y serait tronquée (cadre vide). On l'affiche donc via une adresse blob: équivalente, sans « ; ».
+const _cssBlobs=new Map();
+function cssImg(u){ if(!u) return 'none'; if(!/^data:/.test(u)) return 'url("'+u+'")';
+  let b=_cssBlobs.get(u);
+  if(!b){ try{ const i=u.indexOf(','), mime=(/^data:([^;,]+)/.exec(u)||[])[1]||'image/jpeg', bin=atob(u.slice(i+1)), a=new Uint8Array(bin.length);
+      for(let k=0;k<bin.length;k++) a[k]=bin.charCodeAt(k);
+      b=URL.createObjectURL(new Blob([a],{type:mime}));
+      if(_cssBlobs.size>6){ const [k0,v0]=_cssBlobs.entries().next().value; URL.revokeObjectURL(v0); _cssBlobs.delete(k0); }
+      _cssBlobs.set(u,b); }catch(_){ return 'none'; } }
+  return 'url("'+b+'")'; }
+function openUrl(u){ if(typeof window.__cloveOpenUrl==='function') return window.__cloveOpenUrl(u); try{ window.location.href=u; }catch(_){ } } // __cloveOpenUrl : point d'écoute pour les tests
 const OB=['ob1','ob2','obShapeTuto','obShape','obColors','obPhoto','obFinal'];
 const HEART_BLOCKS=[
   {col:'1 / 3',row:'1 / 3',c:'#E24B0B',g:'#FFFFFF'},
@@ -1279,7 +1389,7 @@ class Component extends DCLogic {
     screen:'welcome', name:'', lastName:'', birth:'', avatar:0, gender:'', attraction:'', social:'',
     loc:false, terms:false, mode:'ghost', radius:200,
     traits:[.5,.5,.5,.5,.5,.5,.5,.5,.5,.5,.5,.5], dodActive:0, hour:19, vol:2, el:null, revealed:false, sig:[], grain:0, motifs:[], storyIdx:0, storyDir:1, verified:false, vStep:null, docType:'cni', recto:false, verso:false, selfie:false, shapeEditedAt:null, editingShape:false, shapeBackup:null, photoUrl:null, photoLum:null, res:12,
-    heroName:'', heroPhone:'', heroSaved:false, alert:null, callSec:0,
+    heroName:'', heroPhone:'', heroCc:'+33', heroSaved:false, alert:null, callSec:0, alertPos:null, sheet:null, blocked:null,
     status:null, photo:false, cd:90,
     matches:[], msgs:[
       {me:false, body:'Bien joué pour l’objet rouge. Le tien était un extincteur ?'},
@@ -1296,7 +1406,7 @@ class Component extends DCLogic {
     const M={id:1,name:'EMMA',spot:'LE KIOSQUE · PLAZA MAYOR',addr:'Plaza Mayor, côté sud, sous les arcades · Madrid'};
     const done={name:'Santiago', lastName:'Ruiz', birth:'1998-03-12', gender:'homme', attraction:'femme', social:'extra', loc:true, terms:true,
       traits:T, dodActive:6, hour:18.5, vol:3, el:1, revealed:true, sig:[], grain:1, motifs:[0], shapeEditedAt:Date.now()};
-    const hero={heroSaved:true, heroName:'Sam', heroPhone:'+33 6 12 34 56 78'};
+    const hero={heroSaved:true, heroName:'Sam', heroCc:'+33', heroPhone:'06 12 34 56 78'};
     const P={
       'welcome':{screen:'welcome'},
       'ob1':{screen:'ob1', name:'Santiago'},
@@ -1414,7 +1524,8 @@ class Component extends DCLogic {
     document.addEventListener('pointerdown',this._fxDown,true);
   }
   componentDidMount(){
-    this.initTapFx();
+    if(STILL){ try{ if(!document.getElementById('clove-still')){ const st=document.createElement('style'); st.id='clove-still'; st.textContent='*,*::before,*::after{animation:none!important;transition:none!important}'; document.head.appendChild(st); } }catch(_){} }
+    else this.initTapFx();
     const dm=(typeof location!=='undefined') && new URLSearchParams(location.search).get('demo');
     window.__cloveDemo=(k)=>this.applyDemo(k);
     window.__cloveEvent=(type,data)=>this.onServerEvent(type,data||{});
@@ -1441,6 +1552,7 @@ class Component extends DCLogic {
   }
   go=(s)=>this.setState({screen:s});
   pageFx(){
+    if(STILL) return;
     const scr=document.querySelector('[data-screen-label]'); if(!scr||!scr.parentElement) return;
     const host=scr.parentElement, reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(reduce){ scr.animate([{opacity:0},{opacity:1}],{duration:200}); return; }
@@ -1459,7 +1571,12 @@ class Component extends DCLogic {
     setTimeout(()=>{ lay.remove(); if(this._pgT===lay) this._pgT=null; },420+4*25+40);
   }
   next=()=>{ if(this.state.screen==='obPhoto' && this.state.photoRaw && !this._cropping){ this._cropping=true; this.applyCrop(()=>{ this.next(); this._cropping=false; }); return; }
-    if(this.state.screen==='obShape' && this.state.editingShape){ this.setState({editingShape:false, shapeEditedAt:Date.now(), screen:'profile'}); return; }
+    if(this.state.screen==='obShape' && this.state.editingShape){ const st=this.state, backup=st.shapeBackup;
+      this.setState({editingShape:false, shapeEditedAt:Date.now(), screen:'profile'});
+      Promise.resolve(call('saveShape',{traits:st.traits, hour:st.hour, vol:st.vol, el:st.el})).then(r=>{ if(!r) return;
+        if(r.shapeLocked) this.setState({traits:backup||st.traits, shapeEditedAt:r.shapeEditedAt, lockNote:true});
+        else if(r.shapeEditedAt) this.setState({shapeEditedAt:r.shapeEditedAt}); });
+      return; }
     const i=OB.indexOf(this.state.screen);
     if(this.state.screen==='obColors' && this.state.el===null) return;
     if(this.state.screen==='obSign' && this.state.sig.length<6) return;
@@ -1471,7 +1588,7 @@ class Component extends DCLogic {
   splitRef=React.createRef();
   wP2Ref=React.createRef();
   openWelcome=()=>{ if(this._wAnim||this.state.wOpen) return; const g=this.wMosRef.current, p=this.wP2Ref.current; const logo=g&&g.querySelector('[data-logo]'); const svg=logo&&logo.querySelector('svg');
-    if(!g||!p||!svg||!g.animate){ this.setState({wOpen:true,wDone:true}); return; }
+    if(STILL||!g||!p||!svg||!g.animate){ this.setState({wOpen:true,wDone:true}); return; }
     this._wAnim=true; const gr=g.getBoundingClientRect(); const W=gr.width+60, H=gr.height+60;
     const B=560, SL=1000, ZM=1050;
     svg.style.transformOrigin='50% 60%';
@@ -1503,14 +1620,19 @@ class Component extends DCLogic {
       setTimeout(()=>this.setState({wOpen:true}),ZM*.62); setTimeout(()=>{ this.setState({wDone:true}); this._wAnim=false; },ZM+60);
     },B+SL-80); };
   sigRef=React.createRef();
+  // Photo → JPEG ≤ 1400 px. On décode d'abord avec <img> (Safari/WebView appliquent l'orientation et lisent le HEIC),
+  // puis createImageBitmap ; une image décodée vide (bug WebKit) est rejetée au lieu d'afficher un cadre uni.
   toJpeg(blob){ return new Promise((res,rej)=>{
-      const draw=(src,w,h)=>{ const M=1400, k=Math.min(1,M/Math.max(w,h)); const c=document.createElement('canvas');
-        c.width=Math.round(w*k); c.height=Math.round(h*k); c.getContext('2d').drawImage(src,0,0,c.width,c.height); res(c.toDataURL('image/jpeg',0.9)); };
-      if(window.createImageBitmap){ createImageBitmap(blob,{imageOrientation:'from-image'}).then(b=>draw(b,b.width,b.height)).catch(()=>fallback()); }
-      else fallback();
-      function fallback(){ const u=URL.createObjectURL(blob), im=new Image();
-        im.onload=()=>{ draw(im,im.naturalWidth,im.naturalHeight); URL.revokeObjectURL(u); };
-        im.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error('decode')); }; im.src=u; } }); }
+      const draw=(src,w,h)=>{ if(!w||!h) return false; const M=1400, k=Math.min(1,M/Math.max(w,h)); const c=document.createElement('canvas');
+        c.width=Math.max(1,Math.round(w*k)); c.height=Math.max(1,Math.round(h*k)); const ctx=c.getContext('2d'); ctx.drawImage(src,0,0,c.width,c.height);
+        try{ const px=ctx.getImageData(0,0,c.width,c.height).data; let seen=false; const step=Math.max(4,Math.floor(px.length/4/400)*4);
+          for(let i=3;i<px.length;i+=step){ if(px[i]!==0){ seen=true; break; } } if(!seen) return false; }catch(_){}
+        res(c.toDataURL('image/jpeg',0.9)); return true; };
+      const viaBitmap=()=>{ if(!window.createImageBitmap) return rej(new Error('decode'));
+        createImageBitmap(blob,{imageOrientation:'from-image'}).then(b=>{ if(!draw(b,b.width,b.height)) rej(new Error('decode')); }).catch(()=>rej(new Error('decode'))); };
+      const u=URL.createObjectURL(blob), im=new Image();
+      im.onload=()=>{ const ok=draw(im,im.naturalWidth,im.naturalHeight); URL.revokeObjectURL(u); if(!ok) viaBitmap(); };
+      im.onerror=()=>{ URL.revokeObjectURL(u); viaBitmap(); }; im.src=u; }); }
   loadHeic(){ if(window.heic2any) return Promise.resolve(window.heic2any);
     if(this._heicP) return this._heicP;
     this._heicP=new Promise((res,rej)=>{ const sc=document.createElement('script');
@@ -1578,8 +1700,20 @@ class Component extends DCLogic {
     else if(type==='herDecision'){ d.accept?this.herAccept():this.herRefuse(); }
     else if(type==='match'){ const m={id:d.id||Date.now(),name:(d.name||'EMMA').toUpperCase(),spot:d.spot||'',addr:d.addr||'',mapsQuery:d.mapsQuery||d.addr||'',a:COBALT,b:CREAM,c:ORANGE,d:PAPER}; this.setState(p=>({status:'MATCH', matches:[m,...(p.matches||[]).filter(x=>x.id!==m.id)]})); }
     else if(type==='failed'){ clearInterval(this._cd); this.setState({status:'FAILED', failBy:d.by||'her'}); }
+    else if(type==='profile') this.restoreProfile(d);
     else if(type==='matches'){ this.setState({matches:(d.list||[]).map(m=>({a:COBALT,b:CREAM,c:ORANGE,d:PAPER,...m,name:String(m.name||'').toUpperCase()}))}); }
   }
+  // Profil déjà enregistré (même compte, ou compte Apple retrouvé) : on reprend où tu en étais.
+  restoreProfile(d){ if(!d||!d.firstName) return; const x=d.extras||{}, ph=splitPhone(d.emergency&&d.emergency.phone);
+    const atStart=this.state.screen==='welcome'||this.state.screen==='story'||OB.includes(this.state.screen);
+    this.setState({name:d.firstName, lastName:d.lastName||'', birth:d.birth||'', gender:d.gender||'', attraction:d.attraction||'',
+      traits:Array.isArray(d.traits)&&d.traits.length===12?d.traits:this.state.traits, hour:d.hour??this.state.hour, vol:d.vol??this.state.vol, el:d.el??this.state.el,
+      shapeEditedAt:d.shapeEditedAt||null, revealed:true, loc:true, terms:true,
+      avatar:x.avatar??0, sig:Array.isArray(x.sig)?x.sig:[], grain:x.grain??0, motifs:Array.isArray(x.motifs)?x.motifs:[], social:x.social||'', radius:x.radius||this.state.radius,
+      ...(d.photo?{photoUrl:d.photo, photoRaw:null}:{}),
+      ...(d.emergency?{heroName:d.emergency.name, heroCc:ph.cc, heroPhone:ph.nat, heroSaved:true}:{}),
+      ...(atStart?{screen:'radar', wOpen:true, wDone:true}:{})});
+    if(d.photo) this.processPhoto(d.photo); }
   setMode=(m)=>{
     clearTimeout(this._t1);
     this.setState({mode:m}); call('setAvailability',{mode:m, radius:this.state.radius});
@@ -1620,14 +1754,34 @@ class Component extends DCLogic {
     this.setState({status:'MATCH', matches:[m]});
   };
   declineSession=()=>{ call('decide',{accept:false, status:this.state.status}); clearInterval(this._cd); clearTimeout(this._t3); this.setState({status:'FAILED', failBy:'me'}); };
-  fireAlert=(...a)=>{ call('alert',{type:a[0]}); return this._fireAlert(...a); };
-  _fireAlert=(type)=>{
-    if(!this.state.heroSaved) return;
-    clearInterval(this._call);
-    this.setState({alert:type, callSec:0});
+  heroE164(){ return phoneE164(this.state.heroCc, this.state.heroPhone); }
+  // Position actuelle (≤ 3 s) pour l'inclure dans le SMS ; sans position, le SMS part quand même.
+  getPos(){ return new Promise(res=>{ const known=call('lastPosition'); if(known) return res(known);
+    if(!navigator.geolocation) return res(null); const t=setTimeout(()=>res(null),3000);
+    navigator.geolocation.getCurrentPosition(p=>{ clearTimeout(t); res({lat:p.coords.latitude, lng:p.coords.longitude}); }, ()=>{ clearTimeout(t); res(null); }, {enableHighAccuracy:true, maximumAge:30000, timeout:3000}); }); }
+  alertBody(type,pos){ const s=this.state, nm=(s.name||'').trim()||'Moi', m=(s.matches||[])[0];
+    const where=m&&m.spot?' Lieu : '+m.spot+(m.addr?' ('+m.addr+')':'')+'.':'';
+    const map=pos?' Ma position : https://maps.google.com/?q='+pos.lat.toFixed(5)+','+pos.lng.toFixed(5):'';
+    return type==='danger'
+      ? 'URGENT — '+nm+' se sent en danger'+(m?' pendant un rendez-vous Clove.':'.')+where+map+' Si je ne réponds pas, appelle le 17 ou le 112.'
+      : nm+' (via Clove) : '+(m?'mon rendez-vous est gênant.':'je suis dans une situation gênante.')+' Tu peux m’appeler dans 5 minutes avec une bonne excuse pour que je parte ? Rien de grave.'+map; }
+  fireAlert=(type)=>{ if(!this.state.heroSaved) return; call('alert',{type}); clearInterval(this._call);
+    const to=this.heroE164(); this.setState({alert:type, callSec:0, alertPos:null});
+    this.getPos().then(pos=>{ this.setState({alertPos:pos}); if(!to) return;
+      openUrl(smsUrl(to, this.alertBody(type,pos)));  // ouvre l'app Messages, message prérempli
+      if(type==='danger'){ // puis l'appel direct au contact, au retour dans Clove
+        const back=()=>{ if(document.visibilityState!=='visible') return; document.removeEventListener('visibilitychange',back); setTimeout(()=>openUrl('tel:'+to),400); };
+        setTimeout(()=>document.addEventListener('visibilitychange',back),500); } });
     if(type==='danger') this._call=setInterval(()=>this.setState(p=>({callSec:p.callSec+1})),1000);
   };
   endAlert=()=>{ clearInterval(this._call); this.setState({alert:null}); };
+  // Feuilles du profil : personnes bloquées, conditions & confidentialité, suppression du compte.
+  openSheet=(k)=>{ this.setState({sheet:k, delStep:0}); if(k==='blocked'){ this.setState({blocked:null}); Promise.resolve(call('listBlocked')).then(r=>this.setState({blocked:(r&&r.list)||[]})); } };
+  closeSheet=()=>this.setState({sheet:null});
+  unblock=(id)=>{ this.setState(p=>({blocked:(p.blocked||[]).filter(b=>b.id!==id)})); call('unblock',{id}); };
+  deleteAccount=()=>{ if(this.state.delBusy) return; this.setState({delBusy:true});
+    Promise.resolve(call('deleteAccount')).then(()=>{ const base=this._init?JSON.parse(JSON.stringify(this._init)):{};
+      clearInterval(this._cd); clearInterval(this._call); this.setState({...base, screen:'welcome', wOpen:false, wDone:false, delBusy:false, sheet:null}); }); };
   startVerify=()=>this.setState({vStep:'intro', recto:false, verso:false, selfie:false});
   closeVerify=()=>{ clearTimeout(this._vt); this.setState({vStep:null}); };
   vNext=()=>{ const st=this.state.vStep;
@@ -1673,7 +1827,7 @@ class Component extends DCLogic {
     const P=(i,v,k)=>{ const a=(-90+i*30)*Math.PI/180, r=(22+v*96)*k; return [150+Math.cos(a)*r,150+Math.sin(a)*r]; };
     const poly=(pts)=>'polygon('+pts.map(p=>p[0].toFixed(1)+'px '+p[1].toFixed(1)+'px').join(',')+')';
     const T=TRAITS[s.dodActive], tv=s.traits[s.dodActive];
-    const phoneOk=/^\+?\d{9,15}$/.test(s.heroPhone.replace(/[\s.\-()]/g,''));
+    const heroTel=phoneE164(s.heroCc, s.heroPhone), phoneOk=!!heroTel;
     const shapeCan=!s.shapeEditedAt || Date.now()-s.shapeEditedAt>=30*86400000;
     const shapeNext=s.shapeEditedAt?new Date(s.shapeEditedAt+30*86400000).toLocaleDateString('fr-FR',{day:'numeric',month:'long'}):'';
     const hh=Math.floor(s.hour), mn=s.hour%1?'30':'00';
@@ -1730,8 +1884,12 @@ class Component extends DCLogic {
       ], isSafety:s.screen==='safety',
       heroName:s.heroName, heroPhone:s.heroPhone, heroSaved:s.heroSaved, heroEditing:!s.heroSaved,
       onHeroName:(e)=>this.setState({heroName:e.target.value}), onHeroPhone:(e)=>this.setState({heroPhone:e.target.value}),
-      saveHero:()=>{ if(s.heroName.trim()&&phoneOk){ this.setState({heroSaved:true}); call('saveEmergencyContact',{name:s.heroName.trim(), phone:s.heroPhone.trim()}); } },
-      phoneBad: s.heroPhone.trim().length>0 && !phoneOk,
+      saveHero:()=>{ if(s.heroName.trim()&&phoneOk){ this.setState({heroSaved:true}); call('saveEmergencyContact',{name:s.heroName.trim(), phone:heroTel}); } },
+      heroCc:s.heroCc, onHeroCc:(e)=>this.setState({heroCc:e.target.value}),
+      countries:COUNTRIES.map(c=>({value:c.c, label:c.f+'  '+c.c+'  '+c.l})),
+      heroCcShown:(()=>{ const c=COUNTRIES.find(x=>x.c===s.heroCc); return c?c.f+' '+c.c:s.heroCc; })(),
+      heroPhoneShown: heroTel ? (()=>{ const sp=splitPhone(heroTel); return sp.cc+' '+sp.nat.replace(/^0\s?/,''); })() : s.heroPhone, heroPlaceholder:s.heroCc==='+33'?'06 12 34 56 78':'Numéro de mobile',
+      phoneBad: s.heroPhone.replace(/[^\d]/g,'').length>=6 && !phoneOk,
       editHero:()=>this.setState({heroSaved:false}),
       heroInitial:(s.heroName.trim()[0]||'?').toUpperCase(), heroNameUp:s.heroName.trim().toUpperCase(),
       heroSaveBg:(s.heroName.trim()&&phoneOk)?INK:'rgba(16,24,46,.4)',
@@ -1742,13 +1900,16 @@ class Component extends DCLogic {
       dangerSub:'SMS avec ta position, puis appel direct à '+s.heroName.trim()+'.',
       awkSub:'Un SMS discret à '+s.heroName.trim()+' : il t’appelle avec une excuse.',
       alertText:()=>this.fireAlert('text'), alertDanger:()=>this.fireAlert('danger'), endAlert:this.endAlert,
-      call112:()=>{},
+      call112:()=>openUrl('tel:112'), call17:()=>openUrl('tel:17'), callHero:()=>{ const t=this.heroE164(); if(t) openUrl('tel:'+t); },
+      sheetBlocked:s.sheet==='blocked', sheetLegal:s.sheet==='legal', sheetDelete:s.sheet==='delete', sheetOpen:!!s.sheet, closeSheet:this.closeSheet,
+      openBlocked:()=>this.openSheet('blocked'), openLegal:()=>this.openSheet('legal'), openDelete:()=>this.openSheet('delete'),
+      blockedLoading:s.sheet==='blocked'&&s.blocked===null, blockedEmpty:Array.isArray(s.blocked)&&s.blocked.length===0,
+      blockedList:(s.blocked||[]).map(b=>({name:String(b.name||'').toUpperCase(), when:b.when||'', unblock:()=>this.unblock(b.id)})),
+      deleteAccount:this.deleteAccount, deleteLabel:s.delBusy?'SUPPRESSION…':'SUPPRIMER DÉFINITIVEMENT',
       alertOn:!!s.alert, isDanger:s.alert==='danger', isAwk:s.alert==='text',
-      alertKicker: s.alert==='danger' ? 'APPEL EN COURS · '+mm(s.callSec) : 'SMS ENVOYÉ À '+s.heroName.trim().toUpperCase(),
-      alertTitle: s.alert==='danger' ? 'On appelle '+s.heroName.trim()+'.' : 'Message parti.',
-      alertMsg: s.alert==='danger'
-        ? 'URGENT — '+name+' se sent en danger'+(s.matches.length?' pendant un date Clove. Lieu : Le Kiosque, Plaza Mayor. Personne : Emma.':'.')+' Position en direct : clove.app/p/'+codeOf(me).toLowerCase()+'. Si je ne réponds pas, appelle le 112.'
-        : name+' (via Clove) : '+(s.matches.length?'mon date au Kiosque, Plaza Mayor, est gênant.':'je suis dans une situation gênante.')+' Tu peux m’appeler dans 5 minutes avec une bonne excuse pour que je parte ? Rien de grave.',
+      alertKicker: s.alert==='danger' ? 'ALERTE · '+mm(s.callSec) : 'SMS PRÊT POUR '+s.heroName.trim().toUpperCase(),
+      alertTitle: s.alert==='danger' ? 'On prévient '+s.heroName.trim()+'.' : 'Message prêt.',
+      alertMsg: s.alert?this.alertBody(s.alert, s.alertPos):'',
       alertKickerBg: s.alert==='danger'?ORANGE:COBALT,
       reportLine: s.matches.length?'SIGNALEMENT ENREGISTRÉ · PROFIL D’EMMA EN COURS D’EXAMEN':'ALERTE ENREGISTRÉE DANS NOS DONNÉES DE SÉCURITÉ',
       showNav:['radar','matches','profile','safety'].includes(s.screen) && !status && !s.alert && !s.vStep,
@@ -1769,9 +1930,9 @@ class Component extends DCLogic {
       canEditShape: shapeCan, shapeLocked: !shapeCan,
       shapeEditBg: shapeCan?INK:'rgba(16,24,46,.4)',
       shapeEditNote: shapeCan?'Tu peux la modifier maintenant. Ensuite, elle sera verrouillée 30 jours.':'Verrouillée jusqu’au '+shapeNext+'. Une empreinte, c’est un engagement : une modification par mois.', isObSign:s.screen==='obSign', isObPhoto:s.screen==='obPhoto', isObFinal:s.screen==='obFinal',
-      photoBg:s.photoUrl?'url('+s.photoUrl+')':'none',
+      photoBg:cssImg(s.photoUrl),
       cropRef:this.cropRef, onCropDown:this.onCropDown, onCropMove:this.onCropMove, onCropUp:this.onCropUp, onCropZoom:this.onCropZoom, cropZ:s.cropZ||1,
-      cropBg:(s.photoRaw||s.photoUrl)?'url('+(s.photoRaw||s.photoUrl)+')':'none', cropTr:'translate('+(s.cropTx||0).toFixed(1)+'px,'+(s.cropTy||0).toFixed(1)+'px) scale('+(s.cropZ||1)+')', hasPhoto:!!s.photoUrl, noPhotoYet:!s.photoUrl,
+      cropBg:cssImg(s.photoRaw||s.photoUrl), cropTr:'translate('+(s.cropTx||0).toFixed(1)+'px,'+(s.cropTy||0).toFixed(1)+'px) scale('+(s.cropZ||1)+')', hasPhoto:!!s.photoUrl, noPhotoYet:!s.photoUrl,
       photoNextBg:s.photoUrl?'#123C96':'rgba(16,24,46,.4)',
       photoPickLabel: s.photoBusy?'CONVERSION DE LA PHOTO…':s.photoErr?'FORMAT ILLISIBLE · RÉESSAIE':'PRENDRE OU CHOISIR UNE PHOTO',
       onPhotoFile:this.onPhotoFile, skipPhoto:this.skipPhoto,
@@ -1815,8 +1976,8 @@ class Component extends DCLogic {
       dodClip:poly(s.traits.map((v,i)=>P(i,v,1))), dodInner:poly(s.traits.map((v,i)=>P(i,v,.62))),
       dodHandles:s.traits.map((v,i)=>{const p=P(i,v,1);return {left:p[0].toFixed(1)+'px',top:p[1].toFixed(1)+'px',size:i===s.dodActive?'14px':'8px',bg:i===s.dodActive?INK:COBALT};}),
       dodLabels:TRAITS.map((t,i)=>{const a=(-90+i*30)*Math.PI/180, cx=Math.cos(a); const W=['CAFÉ','RÉVEIL','SÉRIES','CUISINE','DANSE','VOCAUX','SPORT','VOYAGE','PLANTES','KARAOKÉ','CHIENS','NUIT']; return {label:W[i]||t.k, tr: cx>0.3?'translate(-18%,-50%)':cx<-0.3?'translate(-82%,-50%)':'translate(-50%,-50%)', left:(150+cx*138).toFixed(1)+'px',top:(150+Math.sin(a)*138).toFixed(1)+'px',fg:i===s.dodActive?INK:'rgba(16,24,46,.45)'};}),
-      dodVal:String(Math.round(tv*99)), dodKey:T.k, dodName:T.n, ...(()=>{ const lv=Math.min(4,Math.floor(tv*5)); return {dodLevel:['PAS DU TOUT','UN PEU','MOYEN','BEAUCOUP','À FOND'][lv], dodSegs:[0,1,2,3,4].map(j=>({bg:j<=lv?ORANGE:CREAM}))}; })(),
-      dodNote: (()=>{ const lv=Math.min(4,Math.floor(tv*5)); return [T.lo, T.m1, 'Ni l’un ni l’autre, ça dépend des semaines.', T.m3, T.hi][lv]; })(),
+      dodVal:String(Math.round(tv*99)), dodKey:T.k, dodName:T.n, ...(()=>{ const lv=Math.min(3,Math.floor(tv*4)); return {dodLevel:['PAS DU TOUT','UN PEU','BEAUCOUP','À FOND'][lv], dodSegs:[0,1,2,3].map(j=>({bg:j<=lv?ORANGE:CREAM}))}; })(),
+      dodNote: (()=>{ const lv=Math.min(3,Math.floor(tv*4)); return [T.lo, T.m1, T.m3, T.hi][lv]; })(),
       hour:s.hour, onHour:(e)=>this.setState({hour:Number(e.target.value)}),
       hourPct:(s.hour/24*100)+'%', hourDot:'#FFFFFF', hourLabel:String(hh).padStart(2,'0')+':'+mn+' · '+moment,
       volBars:[14,22,30,40,50].map((h,j)=>({h:h+'px', bg:j<=s.vol?INK:'#fff', pick:()=>this.setState({vol:j})})),
@@ -1842,12 +2003,13 @@ class Component extends DCLogic {
       toggleLoc:()=>this.setState({loc:!s.loc}), toggleTerms:()=>this.setState({terms:!s.terms}),
       locBg:s.loc?TEAL:'#fff', termsBg:s.terms?TEAL:'#fff', locMark:s.loc?'✓':'', termsMark:s.terms?'✓':'',
       notConsented:!(s.loc&&s.terms), enterBg:(s.loc&&s.terms)?ORANGE:'rgba(16,24,46,.4)',
-      enter:()=>{ call('saveProfile',{firstName:s.name, lastName:s.lastName, birth:s.birth, gender:s.gender, attraction:s.attraction, traits:s.traits, hour:s.hour, vol:s.vol, el:s.el, photo:s.photoUrl}); this.setState({screen:'radar', loc:true, terms:true, shapeEditedAt: s.shapeEditedAt || (Date.now() - (this.props.empreinteRecente===false?40:0)*86400000)}); },
+      enter:()=>{ Promise.resolve(call('saveProfile',{firstName:s.name, lastName:s.lastName, birth:s.birth, gender:s.gender, attraction:s.attraction, traits:s.traits, hour:s.hour, vol:s.vol, el:s.el, photo:s.photoUrl,
+          extras:{avatar:s.avatar, sig:s.sig, grain:s.grain, motifs:s.motifs, social:s.social, radius:s.radius}})).then(r=>{ if(r&&r.shapeEditedAt) this.setState({shapeEditedAt:r.shapeEditedAt}); }); this.setState({screen:'radar', loc:true, terms:true, shapeEditedAt: s.shapeEditedAt || (Date.now() - (this.props.empreinteRecente===false?40:0)*86400000)}); },
       hello:('BONJOUR '+name+(s.verified?' · VÉRIFIÉ':'')).toUpperCase(),
       displayName:name.toUpperCase(),
       myA:AVATARS[s.avatar].a, myB:AVATARS[s.avatar].b, myC:AVATARS[s.avatar].c, myD:AVATARS[s.avatar].d,
       splitRef:this.splitRef,
-      toggleMode:()=>{ const n0=(s.radarTurn||0), el=this.splitRef.current; if(el&&el.animate) el.animate([{transform:'rotate('+(n0*180)+'deg)'},{transform:'rotate('+((n0+1)*180)+'deg)'}],{duration:1100,easing:'cubic-bezier(.65,0,.25,1)'}); this.setState(p=>({radarTurn:(p.radarTurn||0)+1})); this.setMode(mode==='full'?'ghost':'full'); },
+      toggleMode:()=>{ const n0=(s.radarTurn||0), el=this.splitRef.current; if(!STILL&&el&&el.animate) el.animate([{transform:'rotate('+(n0*180)+'deg)'},{transform:'rotate('+((n0+1)*180)+'deg)'}],{duration:1100,easing:'cubic-bezier(.65,0,.25,1)'}); this.setState(p=>({radarTurn:(p.radarTurn||0)+1})); this.setMode(mode==='full'?'ghost':'full'); },
       splitRot:((s.radarTurn||0)*180)+'deg',
       ...(()=>{ const top=mode==='full'?COBALT:TEAL, bot=mode==='full'?ORANGE:CREAM, odd=(s.radarTurn||0)%2===1; return {splitA:odd?bot:top, splitB:odd?top:bot}; })(),
       helloC: mode==='full'?'#F4F0E8':'#10182E', modeLabel: mode==='full'?'● À L’ÉCOUTE':'○ ALLUME-MOI',

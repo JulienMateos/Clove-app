@@ -17,6 +17,7 @@
 		C10E00000000000000000011 /* CloveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloveApp.swift; sourceTree = "<group>"; };
 		C10E00000000000000000012 /* CloveWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloveWebView.swift; sourceTree = "<group>"; };
 		C10E00000000000000000013 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C10E00000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C10E00000000000000000010 /* Clove.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Clove.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -46,6 +47,7 @@
 				C10E00000000000000000011 /* CloveApp.swift */,
 				C10E00000000000000000012 /* CloveWebView.swift */,
 				C10E00000000000000000013 /* Assets.xcassets */,
+				C10E00000000000000000014 /* Info.plist */,
 			);
 			path = Clove;
 			sourceTree = "<group>";
@@ -197,6 +199,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Clove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Clove;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Clove utilise l’appareil photo pour les défis photo et ta photo de profil.";
@@ -229,6 +232,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Clove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Clove;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Clove utilise l’appareil photo pour les défis photo et ta photo de profil.";

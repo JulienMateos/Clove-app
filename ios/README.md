@@ -10,7 +10,8 @@ tout se passe dans `web/` et `web/clove-api.js`.
 - `Clove/CloveWebView.swift` : la WebView. Elle ouvre Google Maps, `tel:` et les autres liens externes
   dans les apps du système, et affiche la feuille native **« Se connecter avec Apple »** quand
   `web/clove-api.js` la demande (à la fin de l'onboarding, une seule fois).
-- `Clove/Assets.xcassets` : icône de l'app (logo du design sur fond crème).
+- `Clove/Assets.xcassets` : icône de l'app et écran de lancement (logo du design sur fond blanc cassé).
+- `Clove/Info.plist` : écran de lancement (le reste est généré par Xcode).
 - `Clove.entitlements` : droit « Sign in with Apple ».
 
 Dans l'app (et sur tout téléphone), `clove-api.js` passe en **mode app** : le bandeau de présentation et
@@ -51,9 +52,8 @@ Si App Store Connect n'a pas encore d'app pour `com.clove.mvp`, crée-la d'abord
 
 ## Avant de viser l'App Store
 
-- **Suppression de compte** : Apple l'exige dans l'app. Le bouton existe dans l'UI mais n'appelle
-  rien ; `CloveAPI.deleteAccount()` est prêt côté backend. Avec « Se connecter avec Apple », Apple
-  demande aussi de **révoquer le jeton Apple** à la suppression : à ajouter en même temps.
+- **Révoquer le jeton Apple** à la suppression du compte : Apple le demande pour les comptes
+  « Se connecter avec Apple ». La suppression elle-même est en place (Profil → Supprimer mon compte).
 - **« Juste un site dans une app »** : Apple peut refuser une app qui n'apporte rien de plus qu'un site
   (règle 4.2). Les notifications push et l'usage natif de la position aident à passer ce cap.
 - iOS demande l'autorisation de position *pour le site*, en plus de celle de l'app : c'est le

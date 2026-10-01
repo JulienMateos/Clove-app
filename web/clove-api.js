@@ -49,8 +49,9 @@ const FIREBASE_CONFIG = {
   // ── Mode app : plein écran sur téléphone ───────────────────────────────
   // index.html est la page de présentation du design : bandeau « CLOVE · iOS · V5 » + iPhone dessiné
   // (402×874, fausse encoche, fausse barre d'état 9:41, fausse barre du bas). Sur un vrai téléphone
-  // (ou dans l'app iOS, ou avec ?app=1), on masque ce décor et l'écran de l'app prend tout l'écran.
-  // Rien n'est redessiné : seul le cadre autour de l'écran disparaît. Sur ordinateur, rien ne change.
+  // (ou dans l'app iOS, ou avec ?app=1), on masque ce décor et l'écran de l'app (402×874) est mis à
+  // l'échelle pour remplir le téléphone : mêmes proportions que le design, rien n'est coupé ni redessiné.
+  // Sur ordinateur, rien ne change.
   const APP_MODE = !qs.has('frame') && (!!NATIVE || qs.has('app') ||
     (window.matchMedia && matchMedia('(pointer: coarse) and (max-width: 600px)').matches));
 
@@ -60,7 +61,8 @@ const FIREBASE_CONFIG = {
     html, body { background: #F4F0E8 !important; height: 100% !important; overflow: hidden !important; overscroll-behavior: none; }
     [data-clove-wrap] { padding: 0 !important; gap: 0 !important; min-height: 0 !important; }
     [data-clove-wrap] > :not([data-clove-keep]) { display: none !important; }
-    [data-clove-device] { position: fixed !important; inset: 0 !important; width: 100% !important; height: 100% !important;
+    [data-clove-device] { position: fixed !important; left: var(--clove-x, 0px) !important; top: 0 !important;
+                          transform: scale(var(--clove-k, 1)) !important; transform-origin: 0 0 !important;
                           border-radius: 0 !important; box-shadow: none !important; }
     [data-clove-device] > [data-clove-fake] { display: none !important; }`;
 
@@ -85,7 +87,19 @@ const FIREBASE_CONFIG = {
     while (keep.parentElement && keep.parentElement.style.minHeight !== '100vh') keep = keep.parentElement;
     if (keep.parentElement) { keep.parentElement.setAttribute('data-clove-wrap', ''); keep.setAttribute('data-clove-keep', ''); }
   }
-  if (APP_MODE) { applyAppMode(); setInterval(applyAppMode, 250); }
+  // Échelle : largeur du téléphone, et la plus grande hauteur vue (le clavier ne doit pas rétrécir l'app).
+  let maxH = 0;
+  function fit() {
+    const W = window.innerWidth, H = (maxH = Math.max(maxH, window.innerHeight));
+    const k = Math.min(W / 402, H / 874);
+    document.documentElement.style.setProperty('--clove-k', k.toFixed(4));
+    document.documentElement.style.setProperty('--clove-x', ((W - 402 * k) / 2).toFixed(1) + 'px');
+  }
+  if (APP_MODE) {
+    applyAppMode(); setInterval(applyAppMode, 250);
+    fit(); window.addEventListener('resize', fit);
+    window.addEventListener('orientationchange', () => { maxH = 0; setTimeout(fit, 300); });
+  }
 
   // ── Connexion Apple (app iOS uniquement) ───────────────────────────────
   // La WebView affiche la feuille native « Se connecter avec Apple » et renvoie le jeton ;
@@ -194,7 +208,8 @@ const FIREBASE_CONFIG = {
   window.CloveAPI = {
     live: false, // passe à true dès que la connexion Firebase est prête (voir plus bas)
 
-    // { firstName, lastName, birth:'YYYY-MM-DD', gender, attraction, traits:number[12] (0..1), hour, vol(0..4), el(0..3), photo:dataURL }
+    // { firstName, lastName, birth:'YYYY-MM-DD', gender, attraction, traits:number[12] (0..1), hour, vol(0..4), el(0..3), photo:dataURL,
+    //   extras:{ avatar, sig, grain, motifs, social, radius } }  → { shapeLocked, shapeEditedAt }
     async saveProfile(p) {
       await ensureApple(); // app iOS : connexion Apple à la fin de l'onboarding (annulable)
       const r = await invoke('saveProfile', { ...p, photo: await toJpegDataURL(p.photo) });
@@ -229,8 +244,23 @@ const FIREBASE_CONFIG = {
     // Contact de confiance. { name, phone }
     saveEmergencyContact(p) { return invoke('saveEmergencyContact', { name: p.name, phone: p.phone }); },
 
-    // Pas encore appelé par l'UI (bouton « Supprimer mon compte » sans action) — prêt côté backend.
-    deleteAccount() { return invoke('deleteAccount', {}); },
+    // Modification de l'empreinte depuis le profil (1 fois / 30 jours, vérifié par le serveur).
+    // { traits, hour, vol, el } → { shapeLocked, shapeEditedAt }
+    saveShape(p) { return invoke('updateShape', p); },
+
+    // Profil → Personnes bloquées. → { list:[{ id, name, when }] } ; unblock({ id })
+    listBlocked() { return invoke('listBlocked', {}); },
+    unblock(p) { return invoke('unblock', { id: p.id }); },
+
+    // Profil → Supprimer mon compte : efface tout côté serveur, puis repart sur un compte neuf.
+    async deleteAccount() {
+      const r = await invoke('deleteAccount', {});
+      if (r && auth) await auth.signOut().catch(() => {});
+      return r;
+    },
+
+    // Dernière position connue (radar allumé) — utilisée pour le SMS d'alerte. → { lat, lng } | null
+    lastPosition() { return lastPos; },
 
     // Photo du défi de l'autre, quand la règle séquentielle l'autorise. → data URL ou null
     getOtherPhoto() { return invoke('getOtherPhoto', {}).then((r) => (r ? r.image : null)); },
@@ -264,6 +294,8 @@ const FIREBASE_CONFIG = {
       window.CloveAPI.live = true;
       listen(db);
       invoke('listMatches', {}).then((m) => m && emit('matches', m)); // historique (vide avant l'onboarding)
+      // On se souvient de toi : profil déjà enregistré → l'app reprend sur le radar.
+      invoke('getProfile', {}).then((r) => r && r.profile && emit('profile', r.profile));
     });
   }).catch(() => console.info('[CloveAPI] SDK Firebase introuvable — mode démo'));
 })();
