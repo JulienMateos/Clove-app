@@ -42,7 +42,10 @@ L'ouverture d'une session est une transaction : une personne ne peut pas être d
    dans Google Cloud → *Facturation* → *Budgets et alertes*. Une alerte prévient, elle ne bloque pas.
 3. **Authentication** → *Commencer* → *Mode de connexion* → activer **Anonyme**.
 4. **Firestore Database** → *Créer une base* → emplacement **europe-west1** (ou `eur3`) → mode production.
-5. **Storage** → *Commencer* → même emplacement → mode production.
+5. **Storage** → *Commencer* → emplacement **europe-west1** → mode production.
+   Le quota gratuit de Storage n'existe qu'aux États-Unis (`us-central1`, `us-east1`, `us-west1`).
+   En Europe, chaque Go est facturé dès le premier (quelques centimes par mois au volume de test),
+   mais les photos restent dans l'UE, ce qui est plus simple pour le RGPD.
 6. ⚙︎ → *Paramètres du projet* → *Vos applications* → icône **`</>`** (Web) → nom « Clove web ».
    Copie l'objet `firebaseConfig` et colle-le dans `web/clove-api.js` à la place de `FIREBASE_CONFIG = null`.
 7. Dans un terminal, à la racine du dépôt :
@@ -66,11 +69,11 @@ Blaze inclut des quotas gratuits ; au-delà, c'est à l'usage :
 |---|---|---|
 | Firestore | 1 Gio, 50 000 lectures / 20 000 écritures par jour | ~240 écritures par heure de radar actif et par personne |
 | Cloud Functions | 2 M d'appels / mois | 1 appel toutes les 15 s en mode « full » |
-| Cloud Storage | quota gratuit inclus dans Blaze | photos JPEG ≤ 1400 px |
+| Cloud Storage | 5 Go + 100 Go de téléchargement / mois, **seulement aux États-Unis** ; en Europe, facturé dès le 1er Go | photos JPEG ≤ 1400 px (~200-400 Ko) |
 | Cloud Scheduler | 3 tâches / mois par compte de facturation | 1 tâche (`sweepTimeouts`, chaque minute) |
 | Authentication anonyme, Hosting | gratuits à ce volume | — |
 
-Pour des tests entre amis, la facture attendue est de 0 €.
+Pour des tests entre amis, la facture attendue est de 0 € (ou quelques centimes avec les photos en Europe).
 
 ## Développement local
 
