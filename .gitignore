@@ -5,3 +5,6 @@ data/
 .firebase/
 functions/.env.local
 *.local
+xcuserdata/
+*.xcuserstate
+ios/build/
