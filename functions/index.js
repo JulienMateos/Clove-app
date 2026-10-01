@@ -129,14 +129,18 @@ export const saveProfile = callable(async (d, uid) => {
   // The shape ("empreinte") can only change once every 30 days.
   const shape = { traits, hour: num(d.hour), vol: num(d.vol), el: num(d.el) };
   let shapeLocked = false;
-  if (!existing) {
-    Object.assign(fields, { shape, shape_edited_at: Date.now(), created_at: Date.now(), open_reports: 0, emergency: null });
+  // `existing.shape` absent = profil d'une ancienne version de Clove : on le reprend comme un nouveau.
+  if (!existing || !existing.shape) {
+    Object.assign(fields, {
+      shape, shape_edited_at: Date.now(), created_at: existing?.created_at || Date.now(),
+      open_reports: existing?.open_reports || 0, emergency: existing?.emergency || null,
+    });
   } else if (JSON.stringify(existing.shape) !== JSON.stringify(shape)) {
     if (Date.now() - (existing.shape_edited_at || 0) < SHAPE_COOLDOWN_MS) shapeLocked = true;
     else Object.assign(fields, { shape, shape_edited_at: Date.now() });
   }
   await userRef(uid).set(fields, { merge: true });
-  if (!existing) {
+  if (!(await presenceRef(uid).get()).exists) {
     await presenceRef(uid).set({
       mode: MODE.GHOST, radius: DEFAULT_RADIUS_M, lat: null, lng: null, geohash: null,
       session_id: null, last_session_id: null, updated_at: Date.now(),

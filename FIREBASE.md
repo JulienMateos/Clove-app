@@ -53,7 +53,7 @@ L'ouverture d'une session est une transaction : une personne ne peut pas être d
    ```bash
    npm install && (cd functions && npm install)
    npx firebase login
-   npx firebase use --add        # choisis ton projet, alias « default »
+   npx firebase use --add        # seulement pour un autre projet que clove-dating-app (.firebaserc)
    npm run deploy                # règles, index, functions, hébergement
    ```
 8. Ouvre `https://<ton-projet>.web.app` (ou mets cette adresse dans l'app iOS, voir `ios/README.md`).
