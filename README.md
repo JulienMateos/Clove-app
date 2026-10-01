@@ -14,25 +14,25 @@ sans dépendance externe, pour tourner dans cet environnement sandbox).
 
 ## Démarrer
 
+Le front est `web/index.html` (compilé, ne pas modifier). Il parle au backend **Firebase** via
+`web/clove-api.js`. Mise en ligne, coûts et règles métier : [`FIREBASE.md`](FIREBASE.md).
+App iPhone (Xcode, TestFlight) : [`ios/README.md`](ios/README.md).
+
 ```bash
-npm start          # http://localhost:4000 — sert web/ (l'app) + l'API + le WebSocket /live
-npm test           # test de bout en bout du parcours à deux
+npm install && (cd functions && npm install)
+npm run emulators  # tout en local : http://127.0.0.1:5002/?emulator=1&lat=40.4155&lng=-3.7074
+npm test           # test de bout en bout sur les émulateurs
+npm run deploy     # mise en ligne sur ton projet Firebase
 ```
 
-Le front est `web/index.html` (compilé, ne pas modifier) ; il parle au serveur via
-`web/clove-api.js`. Le détail des routes, des événements et des règles métier est dans
-[`server/README.md`](server/README.md).
+### Tester une rencontre à deux (en local)
+1. `npm run emulators`, puis ouvre dans **deux navigateurs** (ou un normal + une fenêtre privée) :
+   http://127.0.0.1:5002/?emulator=1&lat=40.4155&lng=-3.7074 et
+   http://127.0.0.1:5002/?emulator=1&lat=40.4156&lng=-3.7074 (`lat`/`lng` remplacent le GPS).
+2. Fais l'onboarding avec deux profils compatibles (ex. femme → hommes, homme → femmes).
+3. Touche le cœur du radar des deux côtés : demande → défi photo → elle décide → il décide → match.
 
-> ⚙️ **Zéro dépendance** : modules natifs de Node uniquement, WebSocket RFC 6455 écrit à la main,
-> store JSON persistant sur disque.
-
-### Tester une rencontre à deux
-1. Ouvrez http://localhost:4000/?lat=40.4155&lng=-3.7074 et http://localhost:4000/?lat=40.4156&lng=-3.7074
-   dans **deux navigateurs** (ou une fenêtre privée) : `lat`/`lng` remplacent le GPS.
-2. Faites l'onboarding avec deux profils compatibles (ex. femme → hommes, homme → femmes).
-3. Touchez le cœur du radar des deux côtés : demande → défi photo → elle décide → il décide → match.
-
-> L'ancien front `public/` (avec chat) n'est plus servi ; il est gardé pour référence uniquement.
+> L'ancien front `public/` (avec chat) n'est plus utilisé ; il est gardé pour référence.
 
 ---
 
@@ -40,28 +40,28 @@ Le front est `web/index.html` (compilé, ne pas modifier) ; il parle au serveur 
 
 ```
 web/
-  index.html      L'app compilée (NE PAS MODIFIER)
-  clove-api.js    Pont UI ⇄ serveur (HTTP + WebSocket /live → window.__cloveEvent)
-server/
-  index.js        HTTP (routeur maison) + service statique de web/ + WebSocket
-  matchEngine.js  Moteur de match SERVEUR-AUTORITAIRE + consentement séquentiel
-  store.js        Accès données (store JSON + photos sur disque)
-  db.js           Store documentaire JSON persistant (écriture atomique)
-  ws.js / hub.js  WebSocket RFC 6455 (zéro dépendance) + routage par utilisateur
-  geo.js          Distance Haversine + partitionnement géographique (buckets)
-  constants.js    Étapes, timeouts, spots de rencontre, raisons de signalement
-  moderation.js   Filtre texte + validation des photos
+  index.html          L'app compilée (NE PAS MODIFIER)
+  clove-api.js        Pont UI ⇄ Firebase (Cloud Functions + boîte d'événements temps réel)
+  vendor/firebase/    SDK Firebase embarqué (pas de CDN)
+functions/
+  index.js            Cloud Functions : moteur de match, consentement séquentiel, sécurité
+  constants.js        Étapes, timeouts, spots de rencontre, raisons de signalement
+  moderation.js       Filtre texte + validation des photos
+firestore.rules       Tout fermé, sauf la boîte d'événements de chaque utilisateur
+storage.rules         Photos fermées : seules les Cloud Functions les servent
+ios/                  App SwiftUI (WKWebView) pour Xcode / TestFlight
+scripts/e2e.mjs       Test de bout en bout (émulateurs)
 ```
 
 ### Machine à états d'une rencontre
 `PENDING → CHALLENGE → FIRST_DECISION (elle) → SECOND_DECISION (lui) → MATCH`,
-avec `FAILED` comme sortie (refus, abandon, signalement, timeout). Le serveur est
-seul juge de chaque transition ; le client ne fait qu'afficher.
+avec `FAILED` comme sortie (refus, abandon, signalement, timeout). Le serveur est seul juge de chaque
+transition ; le client ne fait qu'afficher.
 
-### Modèle de données (`data/clove.json` + `data/photos/`)
-`users` (prénom, nom, naissance, genre, attirance, empreinte, contact de confiance) ·
-`presence` (mode, position, rayon, bucket géo) · `sessions` · `matches` (lieu de RDV) ·
-`blocks` · `reports` · `alerts`.
+### Données (Firestore + Storage)
+`users` (profil privé, empreinte, contact de confiance) + `users/{uid}/events` (boîte d'événements) ·
+`presence` (mode, position, geohash, session en cours) · `sessions` · `matches` (lieu de RDV) ·
+`pairs` (déjà rencontrés / bloqués) · `reports` · `alerts` · photos dans `photos/{uid}/`.
 
 ---
 

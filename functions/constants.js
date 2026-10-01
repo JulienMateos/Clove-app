@@ -1,5 +1,6 @@
 // ---------------------------------------------------------------------------
 // Clove — domain constants (aligned on the web/ front, Clove iOS v5)
+// Shared by every Cloud Function.
 // ---------------------------------------------------------------------------
 
 // Radar modes sent by the UI via setAvailability.
@@ -27,6 +28,7 @@ export const SESSION_STATUS = {
   FAILED: 'FAILED',
 };
 export const TERMINAL = new Set([SESSION_STATUS.MATCH, SESSION_STATUS.FAILED]);
+export const LIVE_STATUSES = ['PENDING', 'CHALLENGE', 'FIRST_DECISION', 'SECOND_DECISION'];
 
 // Default proximity radius (m) when the UI doesn't send one, and the hard cap.
 export const DEFAULT_RADIUS_M = 200;

@@ -4,86 +4,88 @@
 // SORTANT  : l'UI appelle window.CloveAPI.<méthode>(payload)
 // ENTRANT  : le backend (WebSocket, SSE, push…) appelle window.__cloveEvent(type, data)
 //
-// Branchement : serveur Node de server/ (HTTP JSON + WebSocket /live).
-// - `live` passe à true seulement si /api/health répond : sans serveur (ex. `npx serve web`),
-//   l'app reste en mode démo.
-// - Base de l'API : même origine par défaut. Pour une WebView ou un front servi ailleurs,
-//   définir `window.CLOVE_API_BASE = 'https://api.clove.app'` avant ce script, ou `?api=` dans l'URL.
+// Branchement : Firebase (voir FIREBASE.md).
+// - Chaque méthode appelle une Cloud Function (functions/index.js), qui applique les règles métier.
+// - Les événements entrants arrivent dans la boîte users/{uid}/events (Firestore, temps réel) :
+//   chaque événement est transmis à window.__cloveEvent puis effacé.
+// - Identité : connexion anonyme Firebase Auth, gardée par le navigateur / la WebView.
+// - `live` passe à true une fois connecté. Sans config Firebase (FIREBASE_CONFIG = null), l'app reste en démo.
 // - Position : navigator.geolocation tant que le radar est en mode « full ».
 //   Pour tester sur desktop : `?lat=40.4155&lng=-3.7074` force la position.
-// - Mode démo forcé : `?demo=…` (géré par l'app) ou `?offline=1`.
+// - `?emulator=1` : utilise les émulateurs locaux (`npm run emulators`). `?offline=1` : mode démo forcé.
+
+// ↓↓↓ Colle ici la config web de ton projet (console Firebase → Paramètres du projet → Tes applications).
+// Ces valeurs ne sont pas secrètes : la sécurité vient des règles et des Cloud Functions.
+const FIREBASE_CONFIG = null;
+// const FIREBASE_CONFIG = {
+//   apiKey: '…', authDomain: '….firebaseapp.com', projectId: '…',
+//   storageBucket: '….firebasestorage.app', messagingSenderId: '…', appId: '…',
+// };
 
 (function () {
-  const qs = new URLSearchParams(location.search);
-  const BASE = (window.CLOVE_API_BASE || qs.get('api') || '').replace(/\/$/, '');
-  const TOKEN_KEY = 'clove_token';
-  const FIXED = qs.has('lat') && qs.has('lng') ? { lat: +qs.get('lat'), lng: +qs.get('lng') } : null;
+  const REGION = 'europe-west1';
+  const SDK = ['app', 'auth', 'firestore', 'functions'].map((m) => `vendor/firebase/firebase-${m}-compat.js`);
   const HEARTBEAT_MS = 15000;
+  const STALE_EVENT_MS = 3 * 60 * 1000; // événements reçus app fermée : on ignore les vieux
 
-  const store = {
-    get: (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } },
-    set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (_) {} },
-  };
-  let token = store.get(TOKEN_KEY);
+  const qs = new URLSearchParams(location.search);
+  const EMULATOR = qs.has('emulator');
+  const FIXED = qs.has('lat') && qs.has('lng') ? { lat: +qs.get('lat'), lng: +qs.get('lng') } : null;
+  const config = EMULATOR ? { apiKey: 'demo-key', projectId: 'demo-clove', appId: 'demo-app', storageBucket: 'demo-clove.appspot.com' } : FIREBASE_CONFIG;
 
-  // ── HTTP ────────────────────────────────────────────────────────────────
-  async function req(method, path, body) {
-    const headers = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = 'Bearer ' + token;
-    const res = await fetch(BASE + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 401) { token = null; store.set(TOKEN_KEY, null); }
-    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
-    return data;
+  let fns = null; // firebase.functions() une fois prêt
+  let uid = null;
+
+  // ── Appels sortants ────────────────────────────────────────────────────
+  function invoke(name, data) {
+    if (!fns) { console.warn('[CloveAPI] backend pas prêt — appel ignoré:', name); return Promise.resolve(null); }
+    return fns.httpsCallable(name)(data).then((r) => r.data)
+      .catch((e) => { console.warn('[CloveAPI]', name, e.code || '', e.message); return null; });
   }
-  const post = (path, body) => {
-    if (!token) { console.warn('[CloveAPI] pas encore de profil — appel ignoré:', path); return Promise.resolve(null); }
-    return req('POST', path, body).catch((e) => { console.warn('[CloveAPI]', path, e.message); return null; });
-  };
 
-  // Blob URL (photo du défi) → data URL envoyable au serveur.
-  async function toDataURL(url) {
-    if (!url || /^data:/.test(url)) return url || null;
+  // Photo du défi (blob URL) ou profil (data URL) → JPEG ≤ 1400 px, sous la limite des Cloud Functions.
+  async function toJpegDataURL(url) {
+    if (!url) return null;
     try {
-      const blob = await (await fetch(url)).blob();
-      return await new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsDataURL(blob); });
-    } catch (_) { return null; }
+      const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = url; });
+      const k = Math.min(1, 1400 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.85);
+    } catch (_) { return /^data:/.test(url) ? url : null; }
   }
 
   // ── Événements entrants ────────────────────────────────────────────────
   // __cloveEvent n'existe qu'une fois l'app montée : on met en file d'attente avant.
   const queue = [];
-  function emit(type, data) {
-    if (typeof window.__cloveEvent === 'function') {
-      while (queue.length) { const [t, d] = queue.shift(); window.__cloveEvent(t, d); }
-      window.__cloveEvent(type, data);
-    } else {
-      queue.push([type, data]);
-      if (queue.length === 1) waitForApp();
-    }
+  let waiting = null;
+  function flush() {
+    if (typeof window.__cloveEvent !== 'function') return false;
+    while (queue.length) { const [t, d] = queue.shift(); try { window.__cloveEvent(t, d); } catch (e) { console.warn(e); } }
+    return true;
   }
-  function waitForApp() {
-    const iv = setInterval(() => {
-      if (typeof window.__cloveEvent !== 'function') return;
-      clearInterval(iv);
-      while (queue.length) { const [t, d] = queue.shift(); window.__cloveEvent(t, d); }
-    }, 100);
+  function emit(type, data) {
+    queue.push([type, data]);
+    if (flush() || waiting) return;
+    waiting = setInterval(() => { if (flush()) { clearInterval(waiting); waiting = null; } }, 100);
   }
 
-  let ws = null, retry = 0;
-  function connect() {
-    if (!token || (ws && ws.readyState <= 1)) return;
-    const origin = BASE || location.origin;
-    ws = new WebSocket(origin.replace(/^http/, 'ws') + '/live?token=' + encodeURIComponent(token));
-    ws.onopen = () => { retry = 0; };
-    ws.onmessage = (e) => { try { const m = JSON.parse(e.data); emit(m.type, m.data); } catch (_) {} };
-    ws.onclose = () => { ws = null; if (!token) return; retry = Math.min(retry + 1, 6); setTimeout(connect, 500 * retry); };
-    ws.onerror = () => { try { ws.close(); } catch (_) {} };
+  function listen(db) {
+    db.collection('users').doc(uid).collection('events').onSnapshot((snap) => {
+      const added = snap.docChanges().filter((c) => c.type === 'added').map((c) => c.doc)
+        .sort((a, b) => (a.get('at') - b.get('at')) || (a.get('n') - b.get('n')));
+      for (const doc of added) {
+        const e = doc.data();
+        if (Date.now() - e.at < STALE_EVENT_MS || e.type === 'matches') emit(e.type, e.data || {});
+        doc.ref.delete().catch(() => {});
+      }
+    }, (e) => console.warn('[CloveAPI] événements:', e.message));
   }
 
   // ── Position (radar en mode « full ») ──────────────────────────────────
   let geoWatch = null, beat = null, lastPos = FIXED;
-  function sendPosition() { if (lastPos) post('/api/availability', lastPos); }
+  const sendPosition = () => { if (lastPos) invoke('setAvailability', lastPos); };
   function startLocating() {
     stopLocating();
     if (!FIXED && navigator.geolocation) {
@@ -102,55 +104,81 @@
 
   // ── Sortant ────────────────────────────────────────────────────────────
   window.CloveAPI = {
-    live: false, // passe à true dès que le serveur répond (voir plus bas)
+    live: false, // passe à true dès que la connexion Firebase est prête (voir plus bas)
 
     // { firstName, lastName, birth:'YYYY-MM-DD', gender, attraction, traits:number[12] (0..1), hour, vol(0..4), el(0..3), photo:dataURL }
-    saveProfile(p) {
-      return req('POST', '/api/profile', p).then((r) => {
-        token = r.token; store.set(TOKEN_KEY, token); connect(); return r;
-      }).catch((e) => console.warn('[CloveAPI] saveProfile', e.message));
+    async saveProfile(p) {
+      const r = await invoke('saveProfile', { ...p, photo: await toJpegDataURL(p.photo) });
+      if (r) invoke('listMatches', {}).then((m) => m && emit('matches', m));
+      return r;
     },
 
     // Tap sur le cœur du radar. { mode:'ghost'|'full', radius:number (m) }
     setAvailability(p) {
       if (p.mode === 'full') startLocating(); else stopLocating();
-      return post('/api/availability', { mode: p.mode, radius: p.radius, ...(lastPos || {}) });
+      return invoke('setAvailability', { mode: p.mode, radius: p.radius, ...(lastPos || {}) });
     },
 
     // L'utilisateur accepte la demande reçue (étape PENDING). { accept:true }
-    respondInterest(p) { return post('/api/interest', { accept: !!p.accept }); },
+    respondInterest(p) { return invoke('respondInterest', { accept: !!p.accept }); },
 
     // Envoi de la photo du défi. { defi:string, image:blobURL }
     async sendChallengePhoto(p) {
-      return post('/api/challenge-photo', { defi: p.defi, image: await toDataURL(p.image) });
+      return invoke('sendChallengePhoto', { defi: p.defi, image: await toJpegDataURL(p.image) });
     },
 
     // Décision à l'étape 2/2, ou abandon à n'importe quelle étape. { accept:boolean, status? }
-    // Un abandon pendant PENDING passe par la même route : le serveur clôt la session en cours.
-    decide(p) { return post('/api/decide', { accept: !!p.accept }); },
+    decide(p) { return invoke('decide', { accept: !!p.accept }); },
 
     // Signalement. { name, reasonIndex } — raisons : 0 photo déplacée, 1 faux profil, 2 comportement insistant,
     // 3 propos haineux, 4 semble mineur·e, 5 arnaque/spam, 6 autre
-    report(p) { return post('/api/report', { name: p.name, reasonIndex: p.reasonIndex }); },
+    report(p) { return invoke('report', { name: p.name, reasonIndex: p.reasonIndex }); },
 
     // Bouton Sécurité. { type:'text' (c'est gênant) | 'danger' }
-    alert(p) { return post('/api/alert', { type: p.type, ...(lastPos || {}) }); },
+    alert(p) { return invoke('alert', { type: p.type, ...(lastPos || {}) }); },
 
     // Contact de confiance. { name, phone }
-    saveEmergencyContact(p) { return post('/api/emergency-contact', { name: p.name, phone: p.phone }); },
+    saveEmergencyContact(p) { return invoke('saveEmergencyContact', { name: p.name, phone: p.phone }); },
+
+    // Pas encore appelé par l'UI (bouton « Supprimer mon compte » sans action) — prêt côté backend.
+    deleteAccount() { return invoke('deleteAccount', {}); },
+
+    // Photo du défi de l'autre, quand la règle séquentielle l'autorise. → data URL ou null
+    getOtherPhoto() { return invoke('getOtherPhoto', {}).then((r) => (r ? r.image : null)); },
   };
 
-  // Active le mode live si le serveur répond, puis ouvre le WebSocket (profil déjà créé).
-  if (!qs.has('demo') && !qs.has('offline')) {
-    fetch(BASE + '/api/health').then((r) => r.ok && r.json()).then((d) => {
-      if (!d || !d.ok) return;
+  // ── Démarrage ──────────────────────────────────────────────────────────
+  if (!config || qs.has('demo') || qs.has('offline')) return; // mode démo
+
+  const base = (document.currentScript && document.currentScript.src) || location.href;
+  const load = (src) => new Promise((ok, ko) => {
+    const s = document.createElement('script'); s.src = new URL(src, base).href; s.onload = ok; s.onerror = ko;
+    document.head.appendChild(s);
+  });
+
+  SDK.reduce((p, src) => p.then(() => load(src)), Promise.resolve()).then(() => {
+    const fb = window.firebase;
+    const app = fb.initializeApp(config);
+    const auth = app.auth(), db = app.firestore(), functions = app.functions(REGION);
+    if (EMULATOR) {
+      const host = location.hostname || '127.0.0.1';
+      auth.useEmulator(`http://${host}:9099`, { disableWarnings: true });
+      db.useEmulator(host, 8080);
+      functions.useEmulator(host, 5001);
+    }
+    auth.onAuthStateChanged((user) => {
+      if (!user) { auth.signInAnonymously().catch((e) => console.warn('[CloveAPI] connexion:', e.message)); return; }
+      if (uid === user.uid) return;
+      uid = user.uid;
+      fns = functions;
       window.CloveAPI.live = true;
-      connect();
-    }).catch(() => console.info('[CloveAPI] serveur injoignable — mode démo'));
-  }
+      listen(db);
+      invoke('listMatches', {}).then((m) => m && emit('matches', m)); // échoue sans profil : normal
+    });
+  }).catch(() => console.info('[CloveAPI] SDK Firebase introuvable — mode démo'));
 })();
 
-// ── Événements entrants (poussés par le serveur via WebSocket /live) ────────
+// ── Événements entrants (écrits par les Cloud Functions dans users/{uid}/events) ──
 // __cloveEvent('interest',    { name:'Emma', age:29 })                 → écran « demande »
 // __cloveEvent('challenge',   { defiIndex:0..6 })                      → écran défi (compte à rebours 90 s)
 // __cloveEvent('herDecision', { accept:true|false })                   → étape 2/2 ou échec

@@ -5,8 +5,14 @@
   "description": "Clove — l'anti-dating app qui renverse les règles du jeu (IRL-first, no-swipe)",
   "type": "module",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "test": "node scripts/e2e.mjs"
+    "emulators": "firebase emulators:start --project demo-clove",
+    "test": "firebase emulators:exec --project demo-clove --only auth,firestore,functions,storage \"node scripts/e2e.mjs\"",
+    "deploy": "firebase deploy",
+    "vendor:firebase": "for m in app auth firestore functions; do cp node_modules/firebase/firebase-$m-compat.js web/vendor/firebase/ && sed -i.bak 's#//# sourceMappingURL=.*##' web/vendor/firebase/firebase-$m-compat.js && rm web/vendor/firebase/*.bak; done"
+  },
+  "devDependencies": {
+    "firebase": "12.19.0",
+    "firebase-admin": "^14.5.0",
+    "firebase-tools": "^15.32.1"
   }
 }

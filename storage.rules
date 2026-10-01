@@ -1,0 +1,10 @@
+rules_version = '2';
+// Photos are written and served only by the Cloud Functions: the sequential
+// reveal rule (getOtherPhoto) decides who may see which photo.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
