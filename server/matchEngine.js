@@ -1,260 +1,211 @@
 // ---------------------------------------------------------------------------
-// Clove — match engine. SERVER-AUTHORITATIVE (analysis Q2 & Q3).
+// Clove — match engine. SERVER-AUTHORITATIVE.
 //
-// The server owns proximity detection, eligibility, the session state machine,
-// challenge assignment, meeting-spot reveal, and TTL-based lock recovery.
-// Clients only render; they never decide whether a match is valid.
+// Proximity detection, eligibility, the session state machine, the challenge
+// draw, timeouts and the meeting spot are all decided here. Clients only
+// render what they are pushed (events consumed by window.__cloveEvent).
+//
+// Sequential double consent:
+//   1. both photos are in → only the first decider ("elle") is moved to REVIEW
+//      and may see the other's photo;
+//   2. if she declines the session fails — the second decider never sees her photo;
+//   3. if she accepts, her photo is revealed to him and he decides;
+//   4. his acceptance creates the match (a meeting spot, no chat).
 // ---------------------------------------------------------------------------
 import * as store from './store.js';
 import * as hub from './hub.js';
 import { distanceMeters, neighborBuckets } from './geo.js';
 import {
-  MODE,
-  ATTRACTION,
-  SOCIAL_STYLE,
-  SESSION_STATUS,
-  MATCH_RADIUS_M,
-  LOCK_TTL_MS,
-  randomChallenge,
-  randomMeetingSpot,
+  MODE, ATTRACTION, GENDER, SESSION_STATUS as S, TERMINAL, STEP_TTL_MS, DEFI_COUNT,
+  MEETING_SPOTS, SPOT_MAX_DISTANCE_M, DEFAULT_RADIUS_M,
 } from './constants.js';
 
-// -- Eligibility -----------------------------------------------------------
-// Mutual attraction check. attraction values: 'homme' | 'femme' | 'les_deux'.
-function attracted(fromAttraction, toGender) {
-  if (fromAttraction === ATTRACTION.LES_DEUX) return true;
-  return fromAttraction === toGender;
+export class FlowError extends Error {
+  constructor(message, status = 409) { super(message); this.status = status; }
 }
 
-function mutuallyEligible(a, b) {
-  if (a.user_id === b.user_id) return false;
-  // Marketing note: the IRL-challenge journey is opt-in for extroverts.
-  // Both must be extraverti to enter the challenge flow (protects the
-  // experience quality — "filtering at the entry").
-  if (a.social_style !== SOCIAL_STYLE.EXTRAVERTI) return false;
-  if (b.social_style !== SOCIAL_STYLE.EXTRAVERTI) return false;
-  if (!attracted(a.attraction, b.gender)) return false;
-  if (!attracted(b.attraction, a.gender)) return false;
-  // Apple 1.2 safety: never match users who have blocked each other, and
-  // keep flagged users (repeat reports) out of the pool.
-  if (store.isBlockedBetween(a.user_id, b.user_id)) return false;
-  if (store.openReportCountAgainst(a.user_id) >= 3) return false;
-  if (store.openReportCountAgainst(b.user_id) >= 3) return false;
+// -- Eligibility -----------------------------------------------------------
+const attracted = (attraction, gender) => attraction === ATTRACTION.LES_DEUX || attraction === gender;
+
+function eligible(a, b) {
+  if (a.id === b.id) return false;
+  if (!attracted(a.attraction, b.gender) || !attracted(b.attraction, a.gender)) return false;
+  if (store.isBlockedBetween(a.id, b.id)) return false;
+  if (store.openReportCountAgainst(a.id) >= 3 || store.openReportCountAgainst(b.id) >= 3) return false;
+  if (store.havePairedBefore(a.id, b.id)) return false;
   return true;
 }
 
-// -- Lock recovery (analysis Q5) ------------------------------------------
-export function releaseStaleLocks() {
-  const active = store.activePresences();
-  const cutoff = Date.now() - LOCK_TTL_MS;
-  for (const p of active) {
-    if (p.in_match && p.lock_at != null && p.lock_at < cutoff) {
-      store.setLock(p.user_id, false);
-      const live = store.findLiveSessionForUser(p.user_id);
-      if (live) cancelSession(live.id, 'timeout');
-    }
-  }
-}
-
 // -- Proximity scan --------------------------------------------------------
-// Called whenever a Full-mode user heartbeats a location. Only compares
-// against candidates in the same/neighbouring geo buckets.
 export function scanForMatch(userId) {
   const me = store.getPresence(userId);
-  if (!me || me.mode !== MODE.FULL || me.in_match || me.lat == null) return null;
-
+  if (!me || me.mode !== MODE.FULL || me.lat == null || store.liveSessionFor(userId)) return null;
   const meUser = store.getUserById(userId);
-  const buckets = neighborBuckets(me.lat, me.lng);
-  const candidates = store.presencesInBuckets(buckets);
 
-  for (const c of candidates) {
-    if (c.user_id === userId || c.in_match) continue;
-    if (!mutuallyEligible(meUser, c)) continue;
-
-    // Don't re-open a session that is already live between these two.
-    if (store.findLiveSessionBetween(userId, c.user_id)) continue;
-
-    const d = distanceMeters(
-      { lat: me.lat, lng: me.lng },
-      { lat: c.lat, lng: c.lng }
-    );
-    // Respect the tighter of the two radii, capped at the global threshold.
-    const threshold = Math.min(MATCH_RADIUS_M, me.radius || MATCH_RADIUS_M, c.radius || MATCH_RADIUS_M);
-    if (d <= threshold) {
-      return openSession(userId, c.user_id, d);
+  for (const c of store.fullPresencesInBuckets(neighborBuckets(me.lat, me.lng))) {
+    if (c.user_id === userId || store.liveSessionFor(c.user_id)) continue;
+    const other = store.getUserById(c.user_id);
+    if (!other || !eligible(meUser, other)) continue;
+    const d = distanceMeters(me, c);
+    if (d <= Math.min(me.radius || DEFAULT_RADIUS_M, c.radius || DEFAULT_RADIUS_M)) {
+      return openSession(meUser, other, d);
     }
   }
   return null;
 }
 
-// -- State machine ---------------------------------------------------------
-function openSession(initiatorId, responderId, distance) {
-  // Lock both users up front to avoid concurrent sessions.
-  store.setLock(initiatorId, true);
-  store.setLock(responderId, true);
-
+function openSession(a, b, distance) {
+  // "Elle" decides first. Without exactly one woman in the pair, the responder does.
+  const aF = a.gender === GENDER.FEMME, bF = b.gender === GENDER.FEMME;
+  const first = aF && !bF ? a.id : b.id;
   const session = store.createSession({
-    initiatorId,
-    responderId,
-    challenge: randomChallenge(),
-    distance: Math.round(distance),
-    status: SESSION_STATUS.PENDING,
+    user_a: a.id, user_b: b.id, first_decider: first, status: S.PENDING,
+    distance: Math.round(distance), interest: {}, photos: {}, defi_index: null, place: null,
   });
-
-  broadcastSession(session);
+  hub.sendTo(a.id, 'interest', store.publicProfile(b));
+  hub.sendTo(b.id, 'interest', store.publicProfile(a));
   return session;
 }
 
-function roleOf(session, userId) {
-  if (session.initiator_id === userId) return 'initiator';
-  if (session.responder_id === userId) return 'responder';
+// -- Helpers ---------------------------------------------------------------
+const otherOf = (s, uid) => (s.user_a === uid ? s.user_b : s.user_a);
+const secondOf = (s) => otherOf(s, s.first_decider);
+
+function requireLive(userId) {
+  const s = store.liveSessionFor(userId);
+  if (!s) throw new FlowError('aucune session en cours', 404);
+  return s;
+}
+
+// -- Steps -----------------------------------------------------------------
+export function respondInterest(userId, accept) {
+  const s = requireLive(userId);
+  if (!accept) return fail(s, userId, 'declined');
+  if (s.status !== S.PENDING) throw new FlowError('étape invalide');
+  const interest = { ...s.interest, [userId]: true };
+  if (interest[s.user_a] && interest[s.user_b]) {
+    const defiIndex = Math.floor(Math.random() * DEFI_COUNT);
+    store.updateSession(s.id, { interest, status: S.CHALLENGE, defi_index: defiIndex });
+    for (const uid of [s.user_a, s.user_b]) hub.sendTo(uid, 'challenge', { defiIndex });
+  } else {
+    store.updateSession(s.id, { interest });
+  }
+  return s;
+}
+
+// photoId may be null: the UI lets a user "shoot" without attaching a file.
+export function submitPhoto(userId, photoId, defi) {
+  const s = requireLive(userId);
+  if (s.status !== S.CHALLENGE) throw new FlowError('étape invalide');
+  if (userId in s.photos) throw new FlowError('photo déjà envoyée');
+  const photos = { ...s.photos, [userId]: photoId };
+  const defis = { ...s.defis, [userId]: defi || null };
+  if (s.user_a in photos && s.user_b in photos) {
+    store.updateSession(s.id, { photos, defis, status: S.FIRST });
+    // Only the first decider moves on to REVIEW; the other stays on "her turn".
+    hub.sendTo(s.first_decider, 'herDecision', { accept: true });
+  } else {
+    store.updateSession(s.id, { photos, defis });
+  }
+  return s;
+}
+
+export function decide(userId, accept) {
+  const s = requireLive(userId);
+  if (!accept) return fail(s, userId, 'declined');
+  if (s.status === S.FIRST && userId === s.first_decider) {
+    store.updateSession(s.id, { status: S.SECOND });
+    hub.sendTo(secondOf(s), 'herDecision', { accept: true });
+    return s;
+  }
+  if (s.status === S.SECOND && userId === secondOf(s)) return complete(s);
+  // Sequential consent: nobody can accept out of turn.
+  throw new FlowError('ce n’est pas ton tour de décider');
+}
+
+function complete(s) {
+  const place = meetingPlace(s);
+  store.updateSession(s.id, { status: S.MATCH, place });
+  const m = store.createMatch({ userA: s.user_a, userB: s.user_b, sessionId: s.id, place });
+  for (const uid of [s.user_a, s.user_b]) {
+    hub.sendTo(uid, 'match', matchView(m, uid));
+    hub.sendTo(uid, 'matches', { list: matchesFor(uid) });
+  }
+  release(s);
+  return s;
+}
+
+// byUserId: who ended it (null = timeout). Everyone else sees "by: 'her'".
+export function fail(s, byUserId, reason) {
+  if (TERMINAL.has(s.status)) return s;
+  const blockers = byUserId ? [byUserId] : blockersOf(s);
+  store.updateSession(s.id, { status: S.FAILED, failed_at: s.status, fail_reason: reason, failed_by: byUserId });
+  for (const uid of [s.user_a, s.user_b]) {
+    hub.sendTo(uid, 'failed', { by: blockers.includes(uid) ? 'me' : 'her' });
+  }
+  release(s);
+  return s;
+}
+
+// Who the session was waiting on when it timed out.
+function blockersOf(s) {
+  const both = [s.user_a, s.user_b];
+  if (s.status === S.PENDING) return both.filter((u) => !s.interest[u]);
+  if (s.status === S.CHALLENGE) return both.filter((u) => !(u in s.photos));
+  if (s.status === S.FIRST) return [s.first_decider];
+  if (s.status === S.SECOND) return [secondOf(s)];
+  return both;
+}
+
+// The UI goes back to Ghost after a session (closeSession), mirror it here.
+function release(s) {
+  for (const uid of [s.user_a, s.user_b]) store.updatePresence(uid, { mode: MODE.GHOST });
+}
+
+export function sweepTimeouts() {
+  const t = Date.now();
+  for (const s of store.liveSessions()) {
+    const ttl = STEP_TTL_MS[s.status];
+    if (ttl && t - s.step_at > ttl) fail(s, null, 'timeout');
+  }
+}
+
+// -- Photo reveal ----------------------------------------------------------
+// Returns the other person's challenge photo id only when the rules allow it.
+export function visibleOtherPhoto(userId) {
+  const s = store.lastSessionFor(userId);
+  if (!s) return null;
+  const first = s.first_decider;
+  const step = s.status === S.FAILED ? s.failed_at : s.status;
+  const herTurnOrLater = [S.FIRST, S.SECOND, S.MATCH].includes(step);
+  const hisTurnOrLater = [S.SECOND, S.MATCH].includes(step);
+  if (userId === first && herTurnOrLater) return s.photos[secondOf(s)] || null;
+  if (userId !== first && hisTurnOrLater) return s.photos[first] || null;
   return null;
 }
 
-// Interest step: both must say yes -> PHOTO_CHALLENGE.
-export function respondInterest(sessionId, userId, interested) {
-  let session = store.getSession(sessionId);
-  if (!session || isTerminal(session.status)) return session;
-  const role = roleOf(session, userId);
-  if (!role) return session;
-
-  if (!interested) {
-    return failSession(sessionId, 'declined');
+// -- Meeting place ---------------------------------------------------------
+function meetingPlace(s) {
+  const a = store.getPresence(s.user_a), b = store.getPresence(s.user_b);
+  const mid = { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 };
+  let best = null, bestD = Infinity;
+  for (const p of MEETING_SPOTS) {
+    const d = distanceMeters(mid, p);
+    if (d < bestD) { best = p; bestD = d; }
   }
-
-  const field = role === 'initiator' ? 'interest_init' : 'interest_resp';
-  session = store.updateSession(sessionId, { [field]: 1 });
-
-  if (session.interest_init === 1 && session.interest_resp === 1) {
-    session = store.updateSession(sessionId, { status: SESSION_STATUS.PHOTO_CHALLENGE });
-  } else {
-    session = store.updateSession(sessionId, { status: SESSION_STATUS.INTEREST_WAIT });
+  if (best && bestD <= SPOT_MAX_DISTANCE_M) {
+    return { spot: best.spot, addr: best.addr, mapsQuery: best.mapsQuery };
   }
-  broadcastSession(session);
-  return session;
+  const q = `${mid.lat.toFixed(5)},${mid.lng.toFixed(5)}`;
+  return { spot: 'POINT DE RENCONTRE', addr: 'À mi-chemin entre vous deux', mapsQuery: q };
 }
 
-// Photo submission -> once both photos in, move to PHOTO_REVIEW.
-export function submitPhoto(sessionId, userId, photoUrl) {
-  let session = store.getSession(sessionId);
-  if (!session || isTerminal(session.status)) return session;
-  const role = roleOf(session, userId);
-  if (!role) return session;
-
-  const field = role === 'initiator' ? 'photo_init' : 'photo_resp';
-  session = store.updateSession(sessionId, { [field]: photoUrl });
-
-  if (session.photo_init && session.photo_resp) {
-    session = store.updateSession(sessionId, { status: SESSION_STATUS.PHOTO_REVIEW });
-  }
-  broadcastSession(session);
-  return session;
+// -- Views -----------------------------------------------------------------
+function matchView(m, uid) {
+  const other = store.getUserById(m.user_a === uid ? m.user_b : m.user_a);
+  return { id: m.id, name: other ? other.first_name : '', ...m.place };
 }
 
-// Photo-review acceptance -> both accept => COMPLETED + meeting spot + match.
-export function reviewDecision(sessionId, userId, accept) {
-  let session = store.getSession(sessionId);
-  if (!session || isTerminal(session.status)) return session;
-  const role = roleOf(session, userId);
-  if (!role) return session;
-
-  if (!accept) {
-    return failSession(sessionId, 'passed');
-  }
-
-  const field = role === 'initiator' ? 'accept_init' : 'accept_resp';
-  session = store.updateSession(sessionId, { [field]: 1 });
-
-  if (session.accept_init === 1 && session.accept_resp === 1) {
-    return completeSession(sessionId);
-  }
-  broadcastSession(session);
-  return session;
-}
-
-function completeSession(sessionId) {
-  const spot = randomMeetingSpot();
-  let session = store.updateSession(sessionId, {
-    status: SESSION_STATUS.COMPLETED,
-    meeting_spot: JSON.stringify(spot),
-  });
-
-  const match = store.createMatch({
-    userA: session.initiator_id,
-    userB: session.responder_id,
-    sessionId: session.id,
-    meetingSpot: spot,
-  });
-
-  store.setLock(session.initiator_id, false);
-  store.setLock(session.responder_id, false);
-
-  broadcastSession(session, { matchId: match.id });
-  return session;
-}
-
-export function failSession(sessionId, reason) {
-  const session = store.updateSession(sessionId, { status: SESSION_STATUS.FAILED });
-  if (session) {
-    store.setLock(session.initiator_id, false);
-    store.setLock(session.responder_id, false);
-    broadcastSession(session, { reason });
-  }
-  return session;
-}
-
-export function cancelSession(sessionId, reason) {
-  const session = store.updateSession(sessionId, { status: SESSION_STATUS.CANCELLED });
-  if (session) {
-    store.setLock(session.initiator_id, false);
-    store.setLock(session.responder_id, false);
-    broadcastSession(session, { reason });
-  }
-  return session;
-}
-
-function isTerminal(status) {
-  return (
-    status === SESSION_STATUS.COMPLETED ||
-    status === SESSION_STATUS.FAILED ||
-    status === SESSION_STATUS.CANCELLED
-  );
-}
-
-// -- Broadcasting ----------------------------------------------------------
-// Serialise a session into a per-user view (progressive reveal aware).
-export function sessionView(session, forUserId, extra = {}) {
-  const role = roleOf(session, forUserId);
-  const otherId = role === 'initiator' ? session.responder_id : session.initiator_id;
-  const other = store.getUserById(otherId);
-
-  const completed = session.status === SESSION_STATUS.COMPLETED;
-  const inReview =
-    session.status === SESSION_STATUS.PHOTO_REVIEW || completed;
-
-  const myPhoto = role === 'initiator' ? session.photo_init : session.photo_resp;
-  const otherPhoto = role === 'initiator' ? session.photo_resp : session.photo_init;
-
-  return {
-    sessionId: session.id,
-    status: session.status,
-    role,
-    challenge: session.challenge,
-    distance: session.distance,
-    // Progressive reveal: full profile only once matched.
-    other: store.publicProfile(other, completed ? 'full' : 'teaser'),
-    myPhoto: myPhoto || null,
-    // The other person's photo is only visible during review / after match.
-    otherPhoto: inReview ? otherPhoto || null : null,
-    myInterest: role === 'initiator' ? session.interest_init : session.interest_resp,
-    myAccept: role === 'initiator' ? session.accept_init : session.accept_resp,
-    meetingSpot: session.meeting_spot ? JSON.parse(session.meeting_spot) : null,
-    ...extra,
-  };
-}
-
-function broadcastSession(session, extra = {}) {
-  for (const uid of [session.initiator_id, session.responder_id]) {
-    hub.sendTo(uid, 'session', sessionView(session, uid, extra));
-  }
+export function matchesFor(uid) {
+  return store.matchesFor(uid).map((m) => matchView(m, uid));
 }

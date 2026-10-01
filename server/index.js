@@ -1,426 +1,302 @@
 // ---------------------------------------------------------------------------
 // Clove — HTTP + WebSocket server. Zero external dependencies (Node built-ins).
+// Serves the compiled front (web/) and the API used by web/clove-api.js.
 // ---------------------------------------------------------------------------
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, normalize, extname } from 'node:path';
+import { dirname, join, normalize, extname, sep } from 'node:path';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
 import * as store from './store.js';
 import * as hub from './hub.js';
 import * as engine from './matchEngine.js';
 import { attachWebSocket } from './ws.js';
-import { MODE } from './constants.js';
+import {
+  MODE, GENDER, ATTRACTION, MIN_AGE, MAX_RADIUS_M, SHAPE_COOLDOWN_MS, REPORT_REASONS,
+} from './constants.js';
 import { moderateText, moderatePhoto } from './moderation.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4000;
-const publicDir = join(__dirname, '..', 'public');
+const webDir = join(__dirname, '..', 'web');
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || '';
 
 // ---- Tiny router ---------------------------------------------------------
-const routes = []; // { method, pattern, handler }
-function route(method, path, handler) {
-  const keys = [];
-  const pattern = new RegExp(
-    '^' +
-      path.replace(/:[^/]+/g, (m) => {
-        keys.push(m.slice(1));
-        return '([^/]+)';
-      }) +
-      '$'
-  );
-  routes.push({ method, pattern, keys, handler });
+const routes = [];
+function route(method, path, handler, { auth = true } = {}) {
+  routes.push({ method, path, handler, auth });
 }
-const get = (p, h) => route('GET', p, h);
-const post = (p, h) => route('POST', p, h);
-const put = (p, h) => route('PUT', p, h);
+
+class HttpError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
+}
+const bad = (msg) => { throw new HttpError(400, msg); };
 
 function json(res, status, body) {
-  const data = JSON.stringify(body);
   res.writeHead(status, { 'Content-Type': 'application/json' });
-  res.end(data);
+  res.end(JSON.stringify(body));
 }
 
 function readBody(req) {
   return new Promise((resolve) => {
-    let raw = '';
+    const chunks = [];
     let size = 0;
     req.on('data', (c) => {
       size += c.length;
-      if (size > 12 * 1024 * 1024) {
-        // 12MB cap (photos are data URLs)
-        req.destroy();
-        return;
-      }
-      raw += c;
+      if (size > 12 * 1024 * 1024) { req.destroy(); return; } // photos are data URLs
+      chunks.push(c);
     });
     req.on('end', () => {
-      if (!raw) return resolve({});
-      try {
-        resolve(JSON.parse(raw));
-      } catch {
-        resolve({});
-      }
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); } catch { resolve({}); }
     });
     req.on('error', () => resolve({}));
   });
 }
 
-function authUser(req) {
+function tokenOf(req) {
   const header = req.headers['authorization'] || '';
-  const url = new URL(req.url, 'http://localhost');
-  const token = header.startsWith('Bearer ') ? header.slice(7) : url.searchParams.get('token');
-  return token ? store.getUserByToken(token) : null;
+  if (header.startsWith('Bearer ')) return header.slice(7);
+  return new URL(req.url, 'http://localhost').searchParams.get('token');
 }
 
-// ---- Auth / profile ------------------------------------------------------
-post('/api/register', async (req, res, params, body) => {
-  const { username, gender, attraction, socialStyle, bio, avatar, consent } = body || {};
-  if (!username || !gender || !attraction) {
-    return json(res, 400, { error: 'username, gender, attraction requis' });
-  }
-  // Apple 5.1: require explicit agreement to terms + location use at sign-up.
-  if (!consent || !consent.terms) {
-    return json(res, 400, { error: 'consentement requis' });
-  }
-  const nameCheck = moderateText(String(username));
-  const bioCheck = bio ? moderateText(String(bio)) : { ok: true };
-  if (!nameCheck.ok) return json(res, 400, { error: 'Pseudo non autorisé.' });
-  if (!bioCheck.ok) return json(res, 400, { error: 'Bio non autorisée.' });
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-  const user = store.createUser({
-    username: String(username).slice(0, 40),
-    gender,
-    attraction,
-    socialStyle: socialStyle || 'introverti',
-    bio: (bio || '').slice(0, 280),
-    avatar: avatar || '',
-    consent,
-  });
-  json(res, 200, { token: user.token, user: safeUser(user), presence: store.getPresence(user.id) });
+function validCoords(body) {
+  const lat = num(body.lat), lng = num(body.lng);
+  if (lat == null || lng == null || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
+
+// ---- Profile -------------------------------------------------------------
+// saveProfile — creates the account on first call, updates it afterwards.
+route('POST', '/api/profile', async (req, res, body) => {
+  const existing = store.getUserByToken(tokenOf(req) || '');
+  const firstName = String(body.firstName || '').trim().slice(0, 40);
+  const lastName = String(body.lastName || '').trim().slice(0, 60);
+  if (!firstName || !moderateText(firstName).ok) bad('Prénom invalide.');
+  if (lastName && !moderateText(lastName).ok) bad('Nom invalide.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(body.birth || '')) bad('Date de naissance invalide.');
+  const age = store.ageOf({ birth: body.birth });
+  if (age == null || age > 120) bad('Date de naissance invalide.');
+  if (age < MIN_AGE) bad(`Réservé aux ${MIN_AGE} ans et plus.`);
+  if (!Object.values(GENDER).includes(body.gender)) bad('Genre invalide.');
+  if (!Object.values(ATTRACTION).includes(body.attraction)) bad('Attirance invalide.');
+  const traits = body.traits;
+  if (!Array.isArray(traits) || traits.length !== 12 || !traits.every((t) => num(t) != null && t >= 0 && t <= 1)) {
+    bad('Empreinte invalide.');
+  }
+  let photoId = existing?.photo_id || null;
+  if (body.photo) {
+    const check = moderatePhoto(body.photo);
+    if (!check.ok) bad(check.reason);
+    photoId = store.savePhoto(body.photo);
+  }
+
+  const fields = {
+    first_name: firstName, last_name: lastName, birth: body.birth,
+    gender: body.gender, attraction: body.attraction, photo_id: photoId,
+    hour: num(body.hour), vol: num(body.vol), el: num(body.el),
+  };
+
+  // The shape ("empreinte") can only change once every 30 days.
+  const shape = { traits, hour: fields.hour, vol: fields.vol, el: fields.el };
+  let shapeLocked = false;
+  if (existing) {
+    const prev = JSON.stringify({ traits: existing.traits, hour: existing.hour, vol: existing.vol, el: existing.el });
+    const changed = prev !== JSON.stringify(shape);
+    if (changed && Date.now() - (existing.shape_edited_at || 0) < SHAPE_COOLDOWN_MS) {
+      shapeLocked = true;
+      Object.assign(fields, { hour: existing.hour, vol: existing.vol, el: existing.el });
+    } else if (changed) {
+      Object.assign(fields, { traits, shape_edited_at: Date.now() });
+    }
+    const u = store.updateUser(existing.id, fields);
+    return json(res, 200, { token: u.token, shapeLocked, shapeEditableAt: (u.shape_edited_at || 0) + SHAPE_COOLDOWN_MS });
+  }
+  const u = store.createUser({ ...fields, traits, shape_edited_at: Date.now() });
+  json(res, 200, { token: u.token, shapeLocked: false, shapeEditableAt: u.shape_edited_at + SHAPE_COOLDOWN_MS });
+}, { auth: false });
+
+route('GET', '/api/me', (req, res, body, u) => {
+  json(res, 200, { ...store.publicProfile(u), emergency: u.emergency, shapeEditableAt: (u.shape_edited_at || 0) + SHAPE_COOLDOWN_MS });
 });
 
-get('/api/me', (req, res) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  json(res, 200, { user: safeUser(u), presence: store.getPresence(u.id) });
-});
-
-put('/api/me', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const { username, bio, avatar, socialStyle, attraction } = body || {};
-  if (username != null && !moderateText(String(username)).ok) {
-    return json(res, 400, { error: 'Pseudo non autorisé.' });
-  }
-  if (bio != null && bio !== '' && !moderateText(String(bio)).ok) {
-    return json(res, 400, { error: 'Bio non autorisée.' });
-  }
-  const updated = store.updateProfile(u.id, { username, bio, avatar, socialStyle, attraction });
-  json(res, 200, { user: safeUser(updated) });
-});
-
-// Apple 5.1.1(v): in-app account deletion (irreversible data purge).
-route('DELETE', '/api/me', (req, res) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const live = store.findLiveSessionForUser(u.id);
-  if (live) engine.cancelSession(live.id, 'account-deleted');
+route('DELETE', '/api/me', (req, res, body, u) => {
+  const live = store.liveSessionFor(u.id);
+  if (live) engine.fail(live, u.id, 'account-deleted');
   store.deleteAccount(u.id);
   json(res, 200, { deleted: true });
 });
 
-// Consent update (e.g. toggling location permission later).
-post('/api/consent', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const updated = store.setConsent(u.id, body || {});
-  json(res, 200, { user: safeUser(updated) });
-});
-
-// ---- Safety: block & report (Apple 1.2) ----------------------------------
-post('/api/block', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const { userId } = body || {};
-  if (!userId) return json(res, 400, { error: 'userId requis' });
-  store.blockUser(u.id, userId);
-  // If we're in a live session with the blocked user, tear it down.
-  const live = store.findLiveSessionForUser(u.id);
-  if (live && (live.initiator_id === userId || live.responder_id === userId)) {
-    engine.cancelSession(live.id, 'blocked');
+// ---- Radar ---------------------------------------------------------------
+// setAvailability {mode, radius} and periodic position updates {lat, lng}.
+route('POST', '/api/availability', (req, res, body, u) => {
+  const patch = {};
+  if (body.mode != null) {
+    if (![MODE.GHOST, MODE.FULL].includes(body.mode)) bad('mode invalide');
+    patch.mode = body.mode;
   }
-  json(res, 200, { blocked: true });
+  if (body.radius != null) {
+    const r = num(body.radius);
+    if (r == null || r <= 0) bad('radius invalide');
+    patch.radius = Math.min(r, MAX_RADIUS_M);
+  }
+  const coords = validCoords(body);
+  if (coords) Object.assign(patch, coords);
+  const p = store.updatePresence(u.id, patch);
+  if (p.mode === MODE.FULL) engine.scanForMatch(u.id);
+  json(res, 200, { mode: p.mode, radius: p.radius, located: p.lat != null });
 });
 
-post('/api/unblock', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const { userId } = body || {};
-  if (!userId) return json(res, 400, { error: 'userId requis' });
-  store.unblockUser(u.id, userId);
-  json(res, 200, { unblocked: true });
+// ---- Session -------------------------------------------------------------
+route('POST', '/api/interest', (req, res, body, u) => {
+  engine.respondInterest(u.id, body.accept === true);
+  json(res, 200, { ok: true });
 });
 
-post('/api/report', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const { userId, context, reason, note, alsoBlock } = body || {};
-  if (!userId) return json(res, 400, { error: 'userId requis' });
-  const report = store.createReport({
-    reporterId: u.id,
-    reportedId: userId,
-    context,
-    reason,
-    note,
+route('POST', '/api/challenge-photo', (req, res, body, u) => {
+  let photoId = null;
+  if (body.image) {
+    const check = moderatePhoto(body.image);
+    if (!check.ok) bad(check.reason);
+    photoId = store.savePhoto(body.image);
+  }
+  engine.submitPhoto(u.id, photoId, String(body.defi || '').slice(0, 120));
+  json(res, 200, { ok: true });
+});
+
+route('POST', '/api/decide', (req, res, body, u) => {
+  engine.decide(u.id, body.accept === true);
+  json(res, 200, { ok: true });
+});
+
+// The other person's challenge photo, only once the sequential rule allows it.
+route('GET', '/api/session/photo', (req, res, body, u) => {
+  const photo = store.readPhoto(engine.visibleOtherPhoto(u.id));
+  if (!photo) return json(res, 404, { error: 'photo non disponible' });
+  res.writeHead(200, { 'Content-Type': photo.type, 'Cache-Control': 'private, no-store' });
+  res.end(photo.data);
+});
+
+route('GET', '/api/matches', (req, res, body, u) => {
+  json(res, 200, { list: engine.matchesFor(u.id) });
+});
+
+// ---- Safety --------------------------------------------------------------
+// The UI only knows the other person's first name: the report targets the
+// other participant of the user's current (or most recent) session.
+route('POST', '/api/report', (req, res, body, u) => {
+  const idx = num(body.reasonIndex);
+  if (idx == null || !REPORT_REASONS[idx]) bad('raison invalide');
+  const s = store.lastSessionFor(u.id);
+  if (!s) bad('personne à signaler introuvable');
+  const reportedId = s.user_a === u.id ? s.user_b : s.user_a;
+  const r = store.createReport({
+    reporter_id: u.id, reported_id: reportedId, session_id: s.id,
+    reason: REPORT_REASONS[idx], name: String(body.name || '').slice(0, 40),
   });
-  if (alsoBlock) {
-    store.blockUser(u.id, userId);
-    const live = store.findLiveSessionForUser(u.id);
-    if (live && (live.initiator_id === userId || live.responder_id === userId)) {
-      engine.cancelSession(live.id, 'reported');
-    }
-  }
-  json(res, 200, { reported: true, id: report.id });
+  // Reporting also blocks: they will never be proposed to each other again.
+  store.blockUser(u.id, reportedId);
+  if (store.liveSessionFor(u.id)?.id === s.id) engine.fail(s, u.id, 'reported');
+  json(res, 200, { reported: true, id: r.id });
 });
 
-// ---- Availability & presence ---------------------------------------------
-post('/api/mode', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const { mode } = body || {};
-  if (![MODE.GHOST, MODE.GLANCE, MODE.FULL].includes(mode)) {
-    return json(res, 400, { error: 'mode invalide' });
-  }
-  const presence = store.setMode(u.id, mode);
-  if (mode === MODE.GHOST) store.setLock(u.id, false);
-  json(res, 200, { presence });
-});
-
-post('/api/heartbeat', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const { lat, lng, radius, mode } = body || {};
-  const presence = store.heartbeat(u.id, { lat, lng, radius, mode });
-
-  let session = store.findLiveSessionForUser(u.id);
-  if (!session && presence.mode === MODE.FULL && !presence.in_match) {
-    session = engine.scanForMatch(u.id);
-  }
-  const nearby = countNearby(presence);
-  json(res, 200, {
-    presence,
-    nearby,
-    session: session ? engine.sessionView(session, u.id) : null,
+route('POST', '/api/alert', async (req, res, body, u) => {
+  if (!['text', 'danger'].includes(body.type)) bad('type invalide');
+  const p = store.getPresence(u.id);
+  const coords = validCoords(body) || (p?.lat != null ? { lat: p.lat, lng: p.lng } : null);
+  const s = store.lastSessionFor(u.id);
+  const a = store.createAlert({
+    user_id: u.id, type: body.type, ...coords, session_id: s?.id || null, emergency: u.emergency,
   });
-});
-
-// ---- Match session actions -----------------------------------------------
-get('/api/session', (req, res) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const session = store.findLiveSessionForUser(u.id);
-  json(res, 200, { session: session ? engine.sessionView(session, u.id) : null });
-});
-
-post('/api/session/:id/interest', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const session = engine.respondInterest(params.id, u.id, !!body?.interested);
-  json(res, 200, { session: session ? engine.sessionView(session, u.id) : null });
-});
-
-post('/api/session/:id/photo', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  if (!body?.photoUrl) return json(res, 400, { error: 'photoUrl requis' });
-  const check = moderatePhoto(body.photoUrl); // Apple 1.2 content filter
-  if (!check.ok) return json(res, 400, { error: check.reason });
-  const session = engine.submitPhoto(params.id, u.id, body.photoUrl);
-  json(res, 200, { session: session ? engine.sessionView(session, u.id) : null });
-});
-
-post('/api/session/:id/review', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const session = engine.reviewDecision(params.id, u.id, !!body?.accept);
-  json(res, 200, { session: session ? engine.sessionView(session, u.id) : null });
-});
-
-post('/api/session/:id/cancel', (req, res, params) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const session = engine.cancelSession(params.id, 'user-cancel');
-  json(res, 200, { session: session ? engine.sessionView(session, u.id) : null });
-});
-
-// ---- Matches & messaging -------------------------------------------------
-get('/api/matches', (req, res) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const rows = store.matchesForUser(u.id);
-  const matches = rows.map((m) => {
-    const otherId = m.user_a === u.id ? m.user_b : m.user_a;
-    const other = store.getUserById(otherId);
-    return {
-      id: m.id,
-      other: store.publicProfile(other, 'full'),
-      meetingSpot: m.meeting_spot ? JSON.parse(m.meeting_spot) : null,
-      matchedAt: m.matched_at,
+  console.warn(`[ALERT] ${body.type} user=${u.id} contact=${u.emergency?.phone || '—'} pos=${coords ? coords.lat + ',' + coords.lng : '—'}`);
+  if (ALERT_WEBHOOK_URL) {
+    const payload = {
+      id: a.id, type: a.type, at: new Date(a.created_at).toISOString(),
+      user: store.publicProfile(u), emergency: u.emergency,
+      position: coords, mapsUrl: coords ? `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}` : null,
     };
-  });
-  json(res, 200, { matches });
+    fetch(ALERT_WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .catch((e) => console.error('alert webhook error', e.message));
+  }
+  json(res, 200, { ok: true, id: a.id, forwarded: !!ALERT_WEBHOOK_URL });
 });
 
-get('/api/matches/:id/messages', (req, res, params) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const match = store.getMatch(params.id);
-  if (!match || (match.user_a !== u.id && match.user_b !== u.id)) {
-    return json(res, 404, { error: 'not found' });
-  }
-  json(res, 200, { messages: store.messagesForMatch(match.id) });
+route('POST', '/api/emergency-contact', (req, res, body, u) => {
+  const name = String(body.name || '').trim().slice(0, 60);
+  const phone = String(body.phone || '').trim();
+  if (!name) bad('nom requis');
+  if (!/^\+?[\d\s.()-]{6,20}$/.test(phone)) bad('téléphone invalide');
+  store.updateUser(u.id, { emergency: { name, phone } });
+  json(res, 200, { ok: true });
 });
 
-post('/api/matches/:id/messages', (req, res, params, body) => {
-  const u = authUser(req);
-  if (!u) return json(res, 401, { error: 'unauthorized' });
-  const match = store.getMatch(params.id);
-  if (!match || (match.user_a !== u.id && match.user_b !== u.id)) {
-    return json(res, 404, { error: 'not found' });
-  }
-  const check = moderateText(body?.body); // Apple 1.2 content filter
-  if (!check.ok) return json(res, 400, { error: check.reason });
-  const msg = store.addMessage(match.id, u.id, check.text);
-  const otherId = match.user_a === u.id ? match.user_b : match.user_a;
-  hub.sendTo(otherId, 'message', { matchId: match.id, message: msg });
-  json(res, 200, { message: msg });
-});
+route('GET', '/api/health', (req, res) => json(res, 200, { ok: true }), { auth: false });
 
-// ---- Helpers -------------------------------------------------------------
-function safeUser(u) {
-  return {
-    id: u.id,
-    username: u.username,
-    gender: u.gender,
-    attraction: u.attraction,
-    socialStyle: u.social_style,
-    bio: u.bio,
-    avatar: u.avatar,
-    verified: !!u.verified,
-    consentLocation: !!u.consent_location,
-    consentTerms: !!u.consent_terms,
-  };
-}
-
-function countNearby(presence) {
-  if (!presence || presence.lat == null || presence.mode === MODE.GHOST) return 0;
-  const all = store.activePresences();
-  const blocked = store.blockedIdsFor(presence.user_id);
-  let n = 0;
-  for (const p of all) {
-    if (p.user_id === presence.user_id) continue;
-    if (blocked.has(p.user_id)) continue; // don't count blocked users
-    const d = quickDist(presence, p);
-    if (d <= (presence.radius || 120) * 5) n++;
-  }
-  return n;
-}
-function quickDist(a, b) {
-  if (a.lat == null || b.lat == null) return Infinity;
-  const R = 6371000;
-  const toRad = (d) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const x =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(x));
-}
-
-// ---- Static file serving -------------------------------------------------
+// ---- Static (web/) -------------------------------------------------------
 const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.ico': 'image/x-icon',
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml',
+  '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json',
 };
 
 function serveStatic(req, res, pathname) {
   let rel = decodeURIComponent(pathname);
   if (rel === '/') rel = '/index.html';
-  const filePath = normalize(join(publicDir, rel));
-  if (!filePath.startsWith(publicDir)) {
-    res.writeHead(403);
-    return res.end('forbidden');
-  }
-  if (existsSync(filePath) && statSync(filePath).isFile()) {
-    const type = MIME[extname(filePath)] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': type });
-    return res.end(readFileSync(filePath));
-  }
-  // SPA fallback
-  const indexPath = join(publicDir, 'index.html');
-  if (existsSync(indexPath)) {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(readFileSync(indexPath));
-  }
-  res.writeHead(404);
-  res.end('not found');
+  const filePath = normalize(join(webDir, rel));
+  if (!filePath.startsWith(webDir + sep)) { res.writeHead(403); return res.end('forbidden'); }
+  const target = existsSync(filePath) && statSync(filePath).isFile() ? filePath : join(webDir, 'index.html');
+  res.writeHead(200, {
+    'Content-Type': MIME[extname(target)] || 'application/octet-stream',
+    'Cache-Control': 'no-cache',
+  });
+  res.end(readFileSync(target));
 }
 
-// ---- Request dispatch ----------------------------------------------------
+// ---- Dispatch ------------------------------------------------------------
 const server = createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://localhost');
-  const pathname = url.pathname;
+  const { pathname } = new URL(req.url, 'http://localhost');
 
   if (pathname.startsWith('/api/')) {
-    const match = routes.find(
-      (r) => r.method === req.method && r.pattern.test(pathname)
-    );
-    if (!match) return json(res, 404, { error: 'not found' });
-    const m = pathname.match(match.pattern);
-    const params = {};
-    match.keys.forEach((k, i) => (params[k] = m[i + 1]));
-    const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readBody(req) : {};
+    res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+
+    const r = routes.find((x) => x.method === req.method && x.path === pathname);
+    if (!r) return json(res, 404, { error: 'not found' });
     try {
-      await match.handler(req, res, params, body);
+      let user = null;
+      if (r.auth) {
+        user = store.getUserByToken(tokenOf(req) || '');
+        if (!user) return json(res, 401, { error: 'unauthorized' });
+      }
+      const body = ['POST', 'PUT'].includes(req.method) ? await readBody(req) : {};
+      await r.handler(req, res, body, user);
     } catch (e) {
+      if (e instanceof HttpError || e instanceof engine.FlowError) return json(res, e.status, { error: e.message });
       console.error('handler error', e);
       if (!res.headersSent) json(res, 500, { error: 'server error' });
     }
     return;
   }
-
   serveStatic(req, res, pathname);
 });
 
-// ---- WebSocket -----------------------------------------------------------
-attachWebSocket(server, '/ws', (ws, req) => {
-  const user = authUser(req);
-  if (!user) {
-    ws.close();
-    return;
-  }
+// ---- WebSocket: server → UI events (forwarded to window.__cloveEvent) -----
+attachWebSocket(server, '/live', (ws, req) => {
+  const user = store.getUserByToken(tokenOf(req) || '');
+  if (!user) return ws.close();
   hub.register(user.id, ws);
-  ws.send(JSON.stringify({ type: 'hello', payload: { userId: user.id } }));
-  const live = store.findLiveSessionForUser(user.id);
-  if (live) ws.send(JSON.stringify({ type: 'session', payload: engine.sessionView(live, user.id) }));
+  ws.send(JSON.stringify({ type: 'matches', data: { list: engine.matchesFor(user.id) } }));
   ws.on('close', () => hub.unregister(user.id, ws));
   ws.on('error', () => hub.unregister(user.id, ws));
 });
 
-// ---- Background sweep: release stale locks -------------------------------
 setInterval(() => {
-  try {
-    engine.releaseStaleLocks();
-  } catch (e) {
-    console.error('sweep error', e);
-  }
-}, 15000);
+  try { engine.sweepTimeouts(); } catch (e) { console.error('sweep error', e); }
+}, 5000);
 
 server.listen(PORT, () => {
   console.log(`Clove server listening on http://localhost:${PORT}`);

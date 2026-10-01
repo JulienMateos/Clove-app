@@ -14,7 +14,7 @@ Le seul travail : **brancher un backend** via `web/clove-api.js`.
 web/
   index.html     ← l'app (NE PAS MODIFIER — fichier compilé)
   clove-api.js   ← pont UI ⇄ backend (LE fichier à modifier)
-server/          ← à créer : ton backend
+server/          ← backend Node (voir server/README.md) — `npm start` sert web/ + API
 ```
 Lancer : `npx serve web` puis ouvrir http://localhost:3000 (ou n'importe quel serveur statique).
 Sur mobile : servir `web/` tel quel (PWA) ou l'afficher dans une WebView (Expo `react-native-webview`, `WKWebView`).
