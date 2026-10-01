@@ -5,7 +5,7 @@ import CryptoKit
 
 enum CloveConfig {
     /// Adresse de l'app sur Firebase Hosting (`npm run deploy`), ex. https://clove-app.web.app/
-    static let appURL = URL(string: "https://TON-PROJET.web.app/")!
+    static let appURL = URL(string: "https://clove-dating-app.web.app/")!
 }
 
 /// Affiche l'app web Clove (web/) en plein écran. Le front n'est pas réécrit :

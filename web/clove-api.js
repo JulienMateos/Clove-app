@@ -11,18 +11,22 @@
 // - Identité : connexion anonyme Firebase Auth ; dans l'app iOS, rattachée à « Se connecter avec Apple »
 //   à la fin de l'onboarding (le compte suit alors la personne d'un téléphone à l'autre).
 // - Mode app : sur téléphone, le décor de présentation (faux iPhone) est masqué. `?frame=1` le garde.
-// - `live` passe à true une fois connecté. Sans config Firebase (FIREBASE_CONFIG = null), l'app reste en démo.
+// - `live` passe à true une fois connecté. Avec FIREBASE_CONFIG = null, l'app reste en démo.
 // - Position : navigator.geolocation tant que le radar est en mode « full ».
 //   Pour tester sur desktop : `?lat=40.4155&lng=-3.7074` force la position.
 // - `?emulator=1` : utilise les émulateurs locaux (`npm run emulators`). `?offline=1` : mode démo forcé.
 
 // ↓↓↓ Colle ici la config web de ton projet (console Firebase → Paramètres du projet → Tes applications).
 // Ces valeurs ne sont pas secrètes : la sécurité vient des règles et des Cloud Functions.
-const FIREBASE_CONFIG = null;
-// const FIREBASE_CONFIG = {
-//   apiKey: '…', authDomain: '….firebaseapp.com', projectId: '…',
-//   storageBucket: '….firebasestorage.app', messagingSenderId: '…', appId: '…',
-// };
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyBQeyM3xrxgvxRDb9fn1MJHuAg_K86IhuI',
+  authDomain: 'clove-dating-app.firebaseapp.com',
+  projectId: 'clove-dating-app',
+  storageBucket: 'clove-dating-app.firebasestorage.app',
+  messagingSenderId: '23111599367',
+  appId: '1:23111599367:web:e64801b03c75fb6d0471a2',
+  measurementId: 'G-KZNP4L33H7',
+};
 
 (function () {
   const REGION = 'europe-west1';

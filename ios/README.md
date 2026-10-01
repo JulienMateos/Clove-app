@@ -15,12 +15,12 @@ l'iPhone dessiné de `index.html` sont masqués, l'écran de l'app occupe tout l
 ## Créer le projet (une fois)
 
 1. Xcode → *File → New → Project…* → **iOS → App**.
-   Nom : `Clove` · Interface : **SwiftUI** · Langage : **Swift** · Identifiant : ex. `app.clove.ios`.
+   Nom : `Clove` · Interface : **SwiftUI** · Langage : **Swift** · Identifiant : ex. `com.clove.mvp`.
    Enregistre le projet dans ce dossier `ios/`.
 2. Supprime le `ContentView.swift` et le `CloveApp.swift` générés, puis glisse dans le projet les deux
    fichiers de `ios/Clove/` (coche *Copy items if needed* : non, *Add to target* : Clove).
-3. Dans `CloveWebView.swift`, remplace `https://TON-PROJET.web.app/` par l'adresse de ton projet
-   (voir `FIREBASE.md`, étape 8).
+3. L'adresse de l'app est déjà réglée dans `CloveWebView.swift` : `https://clove-dating-app.web.app/`
+   (à changer seulement si tu utilises un autre projet Firebase).
 4. Cible *Clove* → onglet **Info** → ajoute :
    | Clé | Valeur (exemple) |
    |---|---|
@@ -37,7 +37,7 @@ l'iPhone dessiné de `index.html` sont masqués, l'écran de l'app occupe tout l
    → **Activer** → **Enregistrer**. Laisse vides les champs « ID de service » et « Flux de code OAuth » :
    ils ne servent que pour une connexion Apple depuis un site web ou Android.
 2. ⚙︎ → **Paramètres du projet** → **Ajouter une application** → **iOS** → « ID du bundle » : le même
-   que dans Xcode (ex. `app.clove.ios`). Firebase reconnaît ainsi les jetons Apple émis pour ton app.
+   que dans Xcode (ex. `com.clove.mvp`). Firebase reconnaît ainsi les jetons Apple émis pour ton app.
    Tu peux ignorer le téléchargement de `GoogleService-Info.plist` et les étapes suivantes :
    l'app passe par le SDK web, pas par le SDK iOS.
 
