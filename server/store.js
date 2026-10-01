@@ -1,388 +1,211 @@
 // ---------------------------------------------------------------------------
 // Clove — data-access layer on top of the JSON document store.
-//
-// Row shapes mirror the original SQLite schema (snake_case fields) so the rest
-// of the server code is unchanged.
+// Photos are written to data/photos/ (never inside the JSON document).
 // ---------------------------------------------------------------------------
+import { join } from 'node:path';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'node:fs';
 import { nanoid } from './ids.js';
-import db from './db.js';
+import db, { dataDir } from './db.js';
 import { bucketKey } from './geo.js';
-import { MODE, PRESENCE_TTL_MS } from './constants.js';
+import { MODE, TERMINAL, PRESENCE_TTL_MS, DEFAULT_RADIUS_M } from './constants.js';
 
 const now = () => Date.now();
-
 const users = () => db.table('users');
 const presence = () => db.table('presence');
 const sessions = () => db.table('sessions');
 const matches = () => db.table('matches');
-const messages = () => db.table('messages');
+
+// ---- Photos --------------------------------------------------------------
+const photoDir = join(dataDir, 'photos');
+mkdirSync(photoDir, { recursive: true });
+
+// dataUrl must already be validated (moderation.moderatePhoto). Returns a photo id.
+export function savePhoto(dataUrl) {
+  const m = /^data:(image\/[a-z+]+);base64,(.+)$/.exec(dataUrl);
+  const id = nanoid();
+  writeFileSync(join(photoDir, id), Buffer.from(m[2], 'base64'));
+  writeFileSync(join(photoDir, id + '.type'), m[1]);
+  return id;
+}
+
+export function readPhoto(id) {
+  if (!id || !/^[\w-]+$/.test(id)) return null;
+  const f = join(photoDir, id);
+  if (!existsSync(f)) return null;
+  return { type: readFileSync(f + '.type', 'utf8'), data: readFileSync(f) };
+}
+
+function deletePhoto(id) {
+  if (!id) return;
+  for (const f of [join(photoDir, id), join(photoDir, id + '.type')]) {
+    try { unlinkSync(f); } catch {}
+  }
+}
 
 // ---- Users ---------------------------------------------------------------
-
-export function createUser({ username, gender, attraction, socialStyle, bio, avatar, consent }) {
-  const id = nanoid();
-  const token = nanoid(32);
+export function createUser(fields) {
   const ts = now();
-  const user = {
-    id,
-    token,
-    username,
-    gender,
-    attraction,
-    social_style: socialStyle,
-    bio: bio || '',
-    avatar: avatar || '',
-    photo_url: '',
-    verified: 1,
-    // Apple 5.1.1: record explicit consent to location + data processing.
-    consent_location: consent?.location ? 1 : 0,
-    consent_terms: consent?.terms ? 1 : 0,
-    consent_at: consent ? ts : null,
-    created_at: ts,
-  };
+  const user = { id: nanoid(), token: nanoid(32), created_at: ts, emergency: null, ...fields };
   users().push(user);
   presence().push({
-    user_id: id,
-    mode: MODE.GHOST,
-    lat: null,
-    lng: null,
-    radius: 120,
-    bucket: null,
-    in_match: 0,
-    lock_at: null,
-    updated_at: ts,
+    user_id: user.id, mode: MODE.GHOST, lat: null, lng: null, radius: DEFAULT_RADIUS_M,
+    bucket: null, updated_at: ts,
   });
   db.persist();
-  return getUserById(id);
+  return user;
 }
 
-export function getUserById(id) {
-  return users().find((u) => u.id === id) || null;
-}
+export const getUserById = (id) => users().find((u) => u.id === id) || null;
+export const getUserByToken = (t) => users().find((u) => u.token === t) || null;
 
-export function getUserByToken(token) {
-  return users().find((u) => u.token === token) || null;
-}
-
-export function updateProfile(id, { username, bio, avatar, socialStyle, attraction }) {
+export function updateUser(id, fields) {
   const u = getUserById(id);
   if (!u) return null;
-  if (username != null) u.username = username;
-  if (bio != null) u.bio = bio;
-  if (avatar != null) u.avatar = avatar;
-  if (socialStyle != null) u.social_style = socialStyle;
-  if (attraction != null) u.attraction = attraction;
+  Object.assign(u, fields);
   db.persist();
   return u;
 }
 
-// Public projection — respects progressive reveal.
-export function publicProfile(user, reveal = 'teaser') {
+export function ageOf(user) {
+  const b = new Date(user.birth + 'T12:00:00');
+  if (isNaN(b)) return null;
+  const n = new Date();
+  let age = n.getFullYear() - b.getFullYear();
+  if (n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) age--;
+  return age;
+}
+
+// Profiles are never public: only first name + age leave the server.
+export function publicProfile(user) {
   if (!user) return null;
-  const base = {
-    id: user.id,
-    username: user.username,
-    avatar: user.avatar,
-    socialStyle: user.social_style,
-    verified: !!user.verified,
-  };
-  if (reveal === 'full') {
-    return { ...base, gender: user.gender, bio: user.bio, photoUrl: user.photo_url };
-  }
-  return { id: user.id, username: user.username, avatar: user.avatar, verified: !!user.verified };
+  return { name: user.first_name, age: ageOf(user) };
 }
 
 // ---- Presence ------------------------------------------------------------
+export const getPresence = (userId) => presence().find((p) => p.user_id === userId) || null;
 
-export function getPresence(userId) {
-  return presence().find((p) => p.user_id === userId) || null;
-}
-
-export function setMode(userId, mode) {
+export function updatePresence(userId, { mode, radius, lat, lng }) {
   const p = getPresence(userId);
   if (!p) return null;
-  p.mode = mode;
-  p.updated_at = now();
-  db.persist();
-  return p;
-}
-
-export function heartbeat(userId, { lat, lng, radius, mode }) {
-  const p = getPresence(userId);
-  if (!p) return null;
-  if (lat != null) p.lat = lat;
-  if (lng != null) p.lng = lng;
-  if (radius != null) p.radius = radius;
   if (mode != null) p.mode = mode;
-  if (p.lat != null && p.lng != null) p.bucket = bucketKey(p.lat, p.lng);
+  if (radius != null) p.radius = radius;
+  if (lat != null && lng != null) {
+    p.lat = lat;
+    p.lng = lng;
+    p.bucket = bucketKey(lat, lng);
+  }
   p.updated_at = now();
   db.persist();
   return p;
 }
 
-// Active = not Ghost, seen recently, located.
-export function activePresences() {
-  const cutoff = now() - PRESENCE_TTL_MS;
-  return presence()
-    .filter((p) => p.mode !== MODE.GHOST && p.updated_at >= cutoff && p.lat != null)
-    .map(withUserFields);
-}
-
-// Candidates in the given geo buckets, Full mode only.
-export function presencesInBuckets(buckets) {
-  if (!buckets.length) return [];
+// Full-mode, located, fresh presences in the given geo buckets.
+export function fullPresencesInBuckets(buckets) {
   const set = new Set(buckets);
   const cutoff = now() - PRESENCE_TTL_MS;
-  return presence()
-    .filter(
-      (p) =>
-        set.has(p.bucket) &&
-        p.mode === MODE.FULL &&
-        p.updated_at >= cutoff &&
-        p.lat != null
-    )
-    .map(withUserFields);
-}
-
-function withUserFields(p) {
-  const u = getUserById(p.user_id);
-  return {
-    ...p,
-    username: u?.username,
-    gender: u?.gender,
-    attraction: u?.attraction,
-    social_style: u?.social_style,
-  };
-}
-
-export function setLock(userId, locked) {
-  const p = getPresence(userId);
-  if (!p) return;
-  p.in_match = locked ? 1 : 0;
-  p.lock_at = locked ? now() : null;
-  db.persist();
+  return presence().filter(
+    (p) => p.mode === MODE.FULL && p.lat != null && p.updated_at >= cutoff && set.has(p.bucket)
+  );
 }
 
 // ---- Sessions ------------------------------------------------------------
-
-const TERMINAL = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
-
-export function findLiveSessionBetween(a, b) {
-  return (
-    sessions()
-      .filter(
-        (s) =>
-          !TERMINAL.has(s.status) &&
-          ((s.initiator_id === a && s.responder_id === b) ||
-            (s.initiator_id === b && s.responder_id === a))
-      )
-      .sort((x, y) => y.created_at - x.created_at)[0] || null
-  );
-}
-
-export function findLiveSessionForUser(userId) {
-  return (
-    sessions()
-      .filter(
-        (s) =>
-          !TERMINAL.has(s.status) &&
-          (s.initiator_id === userId || s.responder_id === userId)
-      )
-      .sort((x, y) => y.created_at - x.created_at)[0] || null
-  );
-}
-
-export function createSession({ initiatorId, responderId, challenge, distance, status }) {
+export function createSession(fields) {
   const ts = now();
-  const s = {
-    id: nanoid(),
-    initiator_id: initiatorId,
-    responder_id: responderId,
-    status,
-    challenge,
-    distance,
-    interest_init: null,
-    interest_resp: null,
-    photo_init: null,
-    photo_resp: null,
-    accept_init: null,
-    accept_resp: null,
-    meeting_spot: null,
-    created_at: ts,
-    updated_at: ts,
-  };
+  const s = { id: nanoid(), created_at: ts, updated_at: ts, step_at: ts, ...fields };
   sessions().push(s);
   db.persist();
   return s;
 }
 
-export function getSession(id) {
-  return sessions().find((s) => s.id === id) || null;
-}
+export const getSession = (id) => sessions().find((s) => s.id === id) || null;
 
 export function updateSession(id, fields) {
   const s = getSession(id);
   if (!s) return null;
-  Object.assign(s, fields);
-  s.updated_at = now();
+  if (fields.status && fields.status !== s.status) fields.step_at = now();
+  Object.assign(s, fields, { updated_at: now() });
   db.persist();
   return s;
 }
 
-// ---- Matches -------------------------------------------------------------
+const involves = (s, uid) => s.user_a === uid || s.user_b === uid;
 
-export function createMatch({ userA, userB, sessionId, meetingSpot }) {
-  const m = {
-    id: nanoid(),
-    user_a: userA,
-    user_b: userB,
-    session_id: sessionId,
-    meeting_spot: JSON.stringify(meetingSpot || null),
-    matched_at: now(),
-  };
+export function liveSessionFor(userId) {
+  return sessions().find((s) => !TERMINAL.has(s.status) && involves(s, userId)) || null;
+}
+
+export function lastSessionFor(userId) {
+  return sessions().filter((s) => involves(s, userId)).sort((a, b) => b.created_at - a.created_at)[0] || null;
+}
+
+export function liveSessions() {
+  return sessions().filter((s) => !TERMINAL.has(s.status));
+}
+
+// Pairs that already went through a session (any outcome) are not re-proposed.
+export function havePairedBefore(a, b) {
+  return sessions().some((s) => involves(s, a) && involves(s, b));
+}
+
+// ---- Matches -------------------------------------------------------------
+export function createMatch({ userA, userB, sessionId, place }) {
+  const m = { id: nanoid(), user_a: userA, user_b: userB, session_id: sessionId, place, matched_at: now() };
   matches().push(m);
   db.persist();
   return m;
 }
 
-export function getMatch(id) {
-  return matches().find((m) => m.id === id) || null;
-}
-
-export function matchesForUser(userId) {
-  return matches()
-    .filter((m) => m.user_a === userId || m.user_b === userId)
+export function matchesFor(userId) {
+  return matches().filter((m) => m.user_a === userId || m.user_b === userId)
     .sort((a, b) => b.matched_at - a.matched_at);
 }
 
-// ---- Messages ------------------------------------------------------------
-
-export function addMessage(matchId, senderId, body) {
-  const msg = {
-    id: nanoid(),
-    match_id: matchId,
-    sender_id: senderId,
-    body,
-    created_at: now(),
-  };
-  messages().push(msg);
-  db.persist();
-  return msg;
+// ---- Blocks, reports, alerts ---------------------------------------------
+export function isBlockedBetween(a, b) {
+  return db.table('blocks').some(
+    (x) => (x.blocker_id === a && x.blocked_id === b) || (x.blocker_id === b && x.blocked_id === a)
+  );
 }
-
-export function messagesForMatch(matchId) {
-  return messages()
-    .filter((m) => m.match_id === matchId)
-    .sort((a, b) => a.created_at - b.created_at);
-}
-
-
-// ---- Consent (Apple 5.1 / 5.1.1) -----------------------------------------
-
-export function setConsent(userId, { location, terms }) {
-  const u = getUserById(userId);
-  if (!u) return null;
-  if (location != null) u.consent_location = location ? 1 : 0;
-  if (terms != null) u.consent_terms = terms ? 1 : 0;
-  u.consent_at = now();
-  db.persist();
-  return u;
-}
-
-// ---- Blocking (Apple 1.2: ability to block abusive users) ----------------
-
-const blocks = () => db.table('blocks');
 
 export function blockUser(blockerId, blockedId) {
-  if (blockerId === blockedId) return null;
-  const exists = blocks().find(
-    (b) => b.blocker_id === blockerId && b.blocked_id === blockedId
-  );
-  if (!exists) {
-    blocks().push({
-      id: nanoid(),
-      blocker_id: blockerId,
-      blocked_id: blockedId,
-      created_at: now(),
-    });
-    db.persist();
-  }
-  return true;
+  if (blockerId === blockedId || isBlockedBetween(blockerId, blockedId)) return;
+  db.table('blocks').push({ id: nanoid(), blocker_id: blockerId, blocked_id: blockedId, created_at: now() });
+  db.persist();
 }
 
-export function unblockUser(blockerId, blockedId) {
-  const arr = blocks();
-  const i = arr.findIndex(
-    (b) => b.blocker_id === blockerId && b.blocked_id === blockedId
-  );
-  if (i >= 0) {
-    arr.splice(i, 1);
-    db.persist();
-  }
-  return true;
-}
-
-// True if either user has blocked the other (mutual exclusion for matching).
-export function isBlockedBetween(a, b) {
-  return blocks().some(
-    (x) =>
-      (x.blocker_id === a && x.blocked_id === b) ||
-      (x.blocker_id === b && x.blocked_id === a)
-  );
-}
-
-export function blockedIdsFor(userId) {
-  const set = new Set();
-  for (const b of blocks()) {
-    if (b.blocker_id === userId) set.add(b.blocked_id);
-    if (b.blocked_id === userId) set.add(b.blocker_id);
-  }
-  return set;
-}
-
-// ---- Reporting (Apple 1.2: mechanism to report objectionable content) ----
-
-const reports = () => db.table('reports');
-
-export function createReport({ reporterId, reportedId, context, reason, note }) {
-  const r = {
-    id: nanoid(),
-    reporter_id: reporterId,
-    reported_id: reportedId,
-    context: context || 'profile', // profile | photo | message
-    reason: reason || 'other',
-    note: (note || '').toString().slice(0, 500),
-    status: 'open',
-    created_at: now(),
-  };
-  reports().push(r);
+export function createReport(fields) {
+  const r = { id: nanoid(), status: 'open', created_at: now(), ...fields };
+  db.table('reports').push(r);
   db.persist();
   return r;
 }
 
-// Count of open reports against a user — used to auto-suspend repeat offenders.
 export function openReportCountAgainst(userId) {
-  return reports().filter((r) => r.reported_id === userId && r.status === 'open')
-    .length;
+  return db.table('reports').filter((r) => r.reported_id === userId && r.status === 'open').length;
 }
 
-// ---- Account deletion (Apple 5.1.1(v): in-app account deletion) ----------
-// Purges ALL data for a user: profile, presence, sessions, matches, messages,
-// blocks and reports they authored.
+export function createAlert(fields) {
+  const a = { id: nanoid(), created_at: now(), ...fields };
+  db.table('alerts').push(a);
+  db.persist();
+  return a;
+}
+
+// ---- Account deletion ----------------------------------------------------
 export function deleteAccount(userId) {
   const purge = (name, pred) => {
     const arr = db.table(name);
-    for (let i = arr.length - 1; i >= 0; i--) {
-      if (pred(arr[i])) arr.splice(i, 1);
-    }
+    for (let i = arr.length - 1; i >= 0; i--) if (pred(arr[i])) arr.splice(i, 1);
   };
-  purge('messages', (m) => m.sender_id === userId);
+  const u = getUserById(userId);
+  if (u) deletePhoto(u.photo_id);
+  for (const s of sessions()) if (involves(s, userId)) { deletePhoto(s.photo_a); deletePhoto(s.photo_b); }
+  purge('sessions', (s) => involves(s, userId));
   purge('matches', (m) => m.user_a === userId || m.user_b === userId);
-  purge('sessions', (s) => s.initiator_id === userId || s.responder_id === userId);
   purge('presence', (p) => p.user_id === userId);
   purge('blocks', (b) => b.blocker_id === userId || b.blocked_id === userId);
   purge('reports', (r) => r.reporter_id === userId);
-  purge('users', (u) => u.id === userId);
+  purge('alerts', (a) => a.user_id === userId);
+  purge('users', (x) => x.id === userId);
   db.persist();
-  return true;
 }

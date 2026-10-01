@@ -15,10 +15,11 @@ export function unregister(userId, ws) {
   if (set.size === 0) connections.delete(userId);
 }
 
-export function sendTo(userId, type, payload) {
+// Wire format matches what web/clove-api.js forwards to window.__cloveEvent.
+export function sendTo(userId, type, data) {
   const set = connections.get(userId);
   if (!set) return;
-  const msg = JSON.stringify({ type, payload });
+  const msg = JSON.stringify({ type, data });
   for (const ws of set) {
     if (ws.readyState === ws.OPEN) ws.send(msg);
   }

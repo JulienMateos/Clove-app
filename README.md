@@ -15,88 +15,53 @@ sans dépendance externe, pour tourner dans cet environnement sandbox).
 ## Démarrer
 
 ```bash
-npm start          # démarre le serveur sur http://localhost:4000
-# ou en mode watch :
-npm run dev
+npm start          # http://localhost:4000 — sert web/ (l'app) + l'API + le WebSocket /live
+npm test           # test de bout en bout du parcours à deux
 ```
 
-Puis ouvrez http://localhost:4000.
+Le front est `web/index.html` (compilé, ne pas modifier) ; il parle au serveur via
+`web/clove-api.js`. Le détail des routes, des événements et des règles métier est dans
+[`server/README.md`](server/README.md).
 
-> ⚙️ **Zéro dépendance** : le serveur n'utilise que les modules natifs de Node
-> (`http`, `crypto`), avec un WebSocket RFC 6455 écrit à la main et un store
-> JSON persistant sur disque. Le front est en JavaScript vanilla (pas de build).
+> ⚙️ **Zéro dépendance** : modules natifs de Node uniquement, WebSocket RFC 6455 écrit à la main,
+> store JSON persistant sur disque.
 
 ### Tester une rencontre à deux
-1. Ouvrez l'app dans **deux onglets** (ou deux navigateurs).
-2. Créez deux profils **compatibles** (ex. l'un « homme cherche femmes », l'autre
-   « femme cherche hommes »), tous deux réglés sur **extraverti·e**.
-3. Passez les deux en mode **Full**, et cliquez sur **« Segovia »** dans les deux
-   pour les placer à la même position.
-4. Une rencontre se déclenche automatiquement : intérêt → défi photo → verdict → match 🎉
+1. Ouvrez http://localhost:4000/?lat=40.4155&lng=-3.7074 et http://localhost:4000/?lat=40.4156&lng=-3.7074
+   dans **deux navigateurs** (ou une fenêtre privée) : `lat`/`lng` remplacent le GPS.
+2. Faites l'onboarding avec deux profils compatibles (ex. femme → hommes, homme → femmes).
+3. Touchez le cœur du radar des deux côtés : demande → défi photo → elle décide → il décide → match.
 
-Un test automatisé complet est fourni : `bash scripts/e2e.sh` (serveur démarré au préalable).
+> L'ancien front `public/` (avec chat) n'est plus servi ; il est gardé pour référence uniquement.
 
 ---
 
 ## Architecture
 
 ```
+web/
+  index.html      L'app compilée (NE PAS MODIFIER)
+  clove-api.js    Pont UI ⇄ serveur (HTTP + WebSocket /live → window.__cloveEvent)
 server/
-  index.js        HTTP (routeur maison) + service statique + WebSocket
-  ws.js           Implémentation WebSocket RFC 6455 (zéro dépendance)
-  matchEngine.js  Moteur de match SERVEUR-AUTORITAIRE + machine à états
-  store.js        Accès données (au-dessus du store JSON)
+  index.js        HTTP (routeur maison) + service statique de web/ + WebSocket
+  matchEngine.js  Moteur de match SERVEUR-AUTORITAIRE + consentement séquentiel
+  store.js        Accès données (store JSON + photos sur disque)
   db.js           Store documentaire JSON persistant (écriture atomique)
+  ws.js / hub.js  WebSocket RFC 6455 (zéro dépendance) + routage par utilisateur
   geo.js          Distance Haversine + partitionnement géographique (buckets)
-  constants.js    Modes, défis, spots de rencontre, TTL, seuils
-  ids.js          Générateur d'identifiants (remplace nanoid)
-public/
-  index.html, styles.css
-  app.js          État global + routeur + WebSocket + toasts
-  dom.js          Micro-hyperscript h()
-  screens/        onboarding, home (radar+modes), matchModal, matches, profile
+  constants.js    Étapes, timeouts, spots de rencontre, raisons de signalement
+  moderation.js   Filtre texte + validation des photos
 ```
 
 ### Machine à états d'une rencontre
-`PENDING → INTEREST_WAIT → PHOTO_CHALLENGE → PHOTO_REVIEW → COMPLETED`
-(avec `FAILED` / `CANCELLED` comme sorties). Le serveur est seul juge de chaque
-transition ; le client ne fait qu'afficher.
+`PENDING → CHALLENGE → FIRST_DECISION (elle) → SECOND_DECISION (lui) → MATCH`,
+avec `FAILED` comme sortie (refus, abandon, signalement, timeout). Le serveur est
+seul juge de chaque transition ; le client ne fait qu'afficher.
 
----
-
-## Comment le code répond au brief produit
-
-| Fonction du brief | Implémentation |
-|---|---|
-| **No swipe** | Aucun feed de profils. Le radar écoute ; le serveur propose. |
-| **Rencontre IRL immédiate** | Une proximité < seuil déclenche une session tout de suite. |
-| **Matching algorithmique** | `matchEngine.scanForMatch` filtre par attraction mutuelle + proximité. |
-| **Défi IRL brise-glace** | Liste de défis (`constants.CHALLENGES`) tirée aléatoirement par session. |
-| **Révélation progressive** | `store.publicProfile(user, 'teaser'|'full')` : profil complet seulement après le match. |
-| **No chat avant la rencontre** | La messagerie n'est ouverte que sur un match `COMPLETED`. |
-| **Modes Ghost / Glance / Full** | `constants.MODE` + `/api/mode` ; Ghost = invisible, Glance = exploration, Full = matching actif. |
-| **Point de rencontre** | Spots publics curatés (`constants.MEETING_SPOTS`, Segovia). |
-| **Persona / filtrage à l'entrée** (notes marketing) | Le parcours à défi n'est proposé qu'aux profils **extravertis** (opt-in). |
-
-## Comment le code répond à l'analyse de codebase (Q1–Q8)
-
-- **Q1 — Découpage du méga-composant** : logique séparée en modules (`matchEngine`, `store`, `geo`, `ws`) et écrans isolés côté client.
-- **Q2 & Q3 — Autorité serveur / sécurité** : la proximité, l'éligibilité et les transitions sont **calculées côté serveur** ; le client n'envoie que sa position et n'a jamais le pouvoir de valider un match. Chaque écriture est authentifiée par token (un utilisateur n'agit que sur ses propres données / sa session).
-- **Q4 — Rôles neutres** : `initiatorId` / `responderId` remplacent `maleId` / `femaleId` ; aucune sémantique de genre dans la machine à états.
-- **Q5 — Récupération du verrou (TTL)** : `LOCK_TTL_MS = 3 min` ; un balayage périodique (`releaseStaleLocks`) libère tout utilisateur bloqué sans heartbeat.
-- **Q7 — Partitionnement géo** : `geo.bucketKey` / `neighborBuckets` limitent le scan aux buckets voisins (préfigure GeoFirestore/geohash).
-
----
-
-## Modèle de données (store JSON)
-
-- `users` — profil (identité vérifiée, style social, bio, avatar)
-- `presence` — mode, position, rayon, verrou `in_match` + `lock_at`, bucket géo
-- `sessions` — machine à états d'une rencontre live
-- `matches` — matchs confirmés (avec point de rencontre)
-- `messages` — chat débloqué après match
-
-Persisté dans `data/clove.json` (écriture atomique via fichier temporaire + rename).
+### Modèle de données (`data/clove.json` + `data/photos/`)
+`users` (prénom, nom, naissance, genre, attirance, empreinte, contact de confiance) ·
+`presence` (mode, position, rayon, bucket géo) · `sessions` · `matches` (lieu de RDV) ·
+`blocks` · `reports` · `alerts`.
 
 ---
 

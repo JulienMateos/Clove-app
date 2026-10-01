@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dataDir = join(__dirname, '..', 'data');
+export const dataDir = process.env.CLOVE_DATA_DIR || join(__dirname, '..', 'data');
 mkdirSync(dataDir, { recursive: true });
 const dbFile = join(dataDir, 'clove.json');
 const tmpFile = join(dataDir, 'clove.json.tmp');
@@ -23,9 +23,9 @@ const EMPTY = {
   presence: [],
   sessions: [],
   matches: [],
-  messages: [],
   blocks: [], // { id, blocker_id, blocked_id, created_at }
-  reports: [], // { id, reporter_id, reported_id, context, reason, note, status, created_at }
+  reports: [], // { id, reporter_id, reported_id, session_id, reason, status, created_at }
+  alerts: [], // { id, user_id, type, lat, lng, session_id, emergency, created_at }
 };
 
 function load() {
