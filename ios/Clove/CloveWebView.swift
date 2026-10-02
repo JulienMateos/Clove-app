@@ -39,7 +39,12 @@ struct CloveWebView: UIViewRepresentable {
         if #available(iOS 16.4, *) { web.isInspectable = true } // Safari → Développement → ton iPhone
         #endif
         context.coordinator.webView = web
-        web.load(URLRequest(url: CloveConfig.appURL))
+        // Toujours la dernière version mise en ligne : on vide le cache des pages (pas la session Firebase,
+        // qui est dans IndexedDB / localStorage), puis on charge sans cache.
+        let caches: Set<String> = [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache, WKWebsiteDataTypeFetchCache]
+        WKWebsiteDataStore.default().removeData(ofTypes: caches, modifiedSince: .distantPast) {
+            web.load(URLRequest(url: CloveConfig.appURL, cachePolicy: .reloadIgnoringLocalCacheData))
+        }
         return web
     }
 
