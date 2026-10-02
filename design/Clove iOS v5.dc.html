@@ -251,15 +251,15 @@ input[type=range]{accent-color:#E24B0B}
 <div style="flex:1;min-height:8px"></div>
 <div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;border:3px solid #10182E;background:#fff;box-shadow:4px 4px 0 #123C96">
 <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-<span style="font:900 21px/1.1 Archivo,sans-serif;letter-spacing:-.02em;color:#10182E">{{ dodName }}</span>
+<span style="display:flex;align-items:center;min-height:2.2em;font:900 21px/1.1 Archivo,sans-serif;letter-spacing:-.02em;color:#10182E">{{ dodName }}</span>
 <span style="flex:none;padding:4px 8px;background:#E24B0B;color:#fff;font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.14em">{{ dodLevel }}</span>
 </div>
-<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">
-<sc-for list="{{ dodSegs }}" as="sg" hint-placeholder-count="5">
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
+<sc-for list="{{ dodSegs }}" as="sg" hint-placeholder-count="4">
 <span style="height:12px;background:{{ sg.bg }};border:2px solid #10182E"></span>
 </sc-for>
 </div>
-<span style="font:600 15px/1.4 Archivo,sans-serif;color:#10182E;text-wrap:pretty">{{ dodNote }}</span>
+<span style="display:block;min-height:2.8em;font:600 15px/1.4 Archivo,sans-serif;color:#10182E;text-wrap:pretty">{{ dodNote }}</span>
 </div>
 <sc-if value="{{ isEditingShape }}" hint-placeholder-val="{{ false }}">
 <p style="margin:0;padding:10px 12px;border:3px solid #10182E;background:#EFE4CE;font:700 10.5px/1.5 'IBM Plex Mono',monospace;letter-spacing:.08em;color:#10182E">MODIFICATION DE L’EMPREINTE · UNE FOIS PAR MOIS. APRÈS VALIDATION, ELLE SERA VERROUILLÉE 30 JOURS. ← POUR ANNULER.</p>
@@ -321,7 +321,7 @@ input[type=range]{accent-color:#E24B0B}
 <label style="margin-top:8px;font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.2em;background:#10182E;color:#F4F0E8;align-self:flex-start;padding:4px 7px;transform:rotate(-.7deg)">À QUELLE HEURE TU ES LE PLUS TOI ?</label>
 <div style="position:relative;height:58px;border:3px solid #10182E;background:linear-gradient(90deg,#10182E 0%,#3A4056 20%,#CFCBC2 35%,#F4F0E8 50%,#CFCBC2 66%,#3A4056 84%,#10182E 100%)">
 <span style="position:absolute;top:50%;left:{{ hourPct }};width:24px;height:24px;margin:-12px 0 0 -12px;background:{{ hourDot }};border:3px solid #10182E;pointer-events:none"></span>
-<input type="range" min="0" max="23.5" step="0.5" value="{{ hour }}" onChange="{{ onHour }}" style="position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize">
+<input type="range" min="0" max="23.5" step="0.5" value="{{ hour }}" onChange="{{ onHour }}" style="position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize;touch-action:none">
 </div>
 <div style="display:flex;justify-content:space-between;align-items:baseline">
 <span style="font:700 9.5px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,24,46,.5)">GLISSE LE SOLEIL</span>
@@ -385,7 +385,7 @@ input[type=range]{accent-color:#E24B0B}
 </div>
 <div style="display:flex;align-items:center;gap:12px;width:100%;max-width:300px;align-self:center">
 <span style="font:900 20px/1 Archivo,sans-serif;color:#10182E">−</span>
-<input type="range" min="1" max="3" step="0.01" value="{{ cropZ }}" onChange="{{ onCropZoom }}" style="flex:1">
+<input type="range" min="1" max="3" step="0.01" value="{{ cropZ }}" onChange="{{ onCropZoom }}" style="flex:1;touch-action:none">
 <span style="font:900 20px/1 Archivo,sans-serif;color:#10182E">+</span>
 </div>
 <label style="align-self:center;padding:0 0 3px;border-bottom:2px solid #10182E;font:700 13px Archivo,sans-serif;color:#10182E;cursor:pointer">Changer de photo<input type="file" accept="image/*,.heic,.heif,.HEIC,.HEIF" onChange="{{ onPhotoFile }}" style="display:none"></label>
@@ -542,7 +542,7 @@ input[type=range]{accent-color:#E24B0B}
 <h2 style="margin:0;font:900 22px/1 Archivo,sans-serif;letter-spacing:-.02em;color:#10182E">Rayon</h2>
 <span style="font:700 20px 'IBM Plex Mono',monospace;background:{{ chipBg }};color:{{ chipFg }};border:3px solid #10182E;padding:3px 9px;transform:rotate(1deg)">{{ radiusLabel }}</span>
 </div>
-<input type="range" min="50" max="350" step="10" value="{{ radius }}" onChange="{{ onRadius }}" style="width:100%;margin-top:16px;accent-color:{{ sliderAccent }}">
+<input type="range" min="50" max="350" step="10" value="{{ radius }}" onChange="{{ onRadius }}" style="width:100%;margin-top:16px;accent-color:{{ sliderAccent }};touch-action:none">
 <p style="margin:8px 0 0;font:600 15px/1.35 Archivo,sans-serif;color:#10182E;text-wrap:pretty">Jusqu’où Clove cherche quelqu’un pour toi.</p>
 </div>
 </div>
@@ -1171,13 +1171,12 @@ input[type=range]{accent-color:#E24B0B}
 </div>
 <button onClick="{{ closeSheet }}" style="width:40px;height:40px;flex:none;background:#fff;border:3px solid #10182E;font:900 18px Archivo,sans-serif;color:#10182E;cursor:pointer">×</button>
 </div>
+<p style="margin:0;font:500 13.5px/1.4 Archivo,sans-serif;color:#10182E">Pas de profil public, pas de publicité, pas de revente. Le détail, noir sur blanc :</p>
 <div style="display:flex;flex-direction:column;border:3px solid #10182E;background:#fff">
-<div style="padding:12px;border-bottom:2px solid #EFE4CE"><span style="display:block;font:800 15px Archivo,sans-serif;color:#10182E">Ce qu’on garde</span><span style="display:block;margin-top:4px;font:500 13px/1.45 Archivo,sans-serif;color:rgba(16,24,46,.8)">Prénom, nom, date de naissance, genre et attirance, ton empreinte, ta photo, ton contact de confiance. Ta position seulement quand le radar est allumé, jamais en arrière-plan.</span></div>
-<div style="padding:12px;border-bottom:2px solid #EFE4CE"><span style="display:block;font:800 15px Archivo,sans-serif;color:#10182E">Ce que les autres voient</span><span style="display:block;margin-top:4px;font:500 13px/1.45 Archivo,sans-serif;color:rgba(16,24,46,.8)">Ton prénom et ton âge. Rien d’autre : pas de profil public, pas de photo tant que vous ne vous êtes pas choisis l’un l’autre.</span></div>
-<div style="padding:12px;border-bottom:2px solid #EFE4CE"><span style="display:block;font:800 15px Archivo,sans-serif;color:#10182E">Photos des défis</span><span style="display:block;margin-top:4px;font:500 13px/1.45 Archivo,sans-serif;color:rgba(16,24,46,.8)">Elle voit ta photo en premier. Si elle refuse, tu ne vois jamais la sienne.</span></div>
-<div style="padding:12px;border-bottom:2px solid #EFE4CE"><span style="display:block;font:800 15px Archivo,sans-serif;color:#10182E">Sécurité</span><span style="display:block;margin-top:4px;font:500 13px/1.45 Archivo,sans-serif;color:rgba(16,24,46,.8)">Les alertes et signalements sont conservés pour la modération. Ton contact de confiance ne reçoit rien tant que tu n’appuies pas.</span></div>
-<div style="padding:12px"><span style="display:block;font:800 15px Archivo,sans-serif;color:#10182E">Tes droits</span><span style="display:block;margin-top:4px;font:500 13px/1.45 Archivo,sans-serif;color:rgba(16,24,46,.8)">Pas de publicité, pas de revente. Tu peux supprimer ton compte et toutes tes données à tout moment depuis ton profil. Réservé aux 17 ans et plus.</span></div>
+<button onClick="{{ openTerms }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 12px;background:#fff;border:0;border-bottom:2px solid #EFE4CE;text-align:left;cursor:pointer;color:#10182E"><span style="display:block"><span style="display:block;font:800 15px Archivo,sans-serif">Conditions générales d’utilisation</span><span style="display:block;margin-top:3px;font:500 12px/1.35 Archivo,sans-serif;color:rgba(16,24,46,.7)">Règles du jeu, rencontres, sécurité, mentions légales</span></span><span style="font:900 18px Archivo,sans-serif">→</span></button>
+<button onClick="{{ openPrivacy }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 12px;background:#fff;border:0;text-align:left;cursor:pointer;color:#10182E"><span style="display:block"><span style="display:block;font:800 15px Archivo,sans-serif">Politique de confidentialité</span><span style="display:block;margin-top:3px;font:500 12px/1.35 Archivo,sans-serif;color:rgba(16,24,46,.7)">Données collectées, position, durées, tes droits (RGPD)</span></span><span style="font:900 18px Archivo,sans-serif">→</span></button>
 </div>
+<p style="margin:0;font:700 10px/1.6 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,24,46,.6)">SUPPRIMER TES DONNÉES : PROFIL → SUPPRIMER MON COMPTE</p>
 </sc-if>
 
 <sc-if value="{{ sheetDelete }}" hint-placeholder-val="{{ false }}">
@@ -1240,8 +1239,8 @@ const AVATARS=[
 ];
 const DEFIS=[['TROUVEZ UN','OBJET','ROUGE','ET SHOOTEZ-LE.'],['PHOTOGRAPHIEZ','UN','CHIEN','QUI PASSE.'],['TROUVEZ UNE','LETTRE','C','SUR UNE ENSEIGNE.'],['SHOOTEZ LE','PLUS','PETIT','OBJET POSSIBLE.'],['TROUVEZ UN','','CŒUR','CACHÉ DANS LA RUE.'],['SHOOTEZ UNE','FENÊTRE','FLEURIE','PRÈS DE VOUS.'],['TROUVEZ UN','NOMBRE','7','QUELQUE PART.']];
 const TILTS=['-2deg','1.5deg','-1deg','2.5deg'];
-// Écrans fixes : pas d'animation de couleurs (bandes, transitions, battements). ?motion=1 pour les revoir.
-const STILL=!(typeof location!=='undefined' && /[?&]motion=1/.test(location.search));
+// ?still=1 : coupe les animations (bandes, transitions, battements), pour des captures d'écran.
+const STILL=(typeof location!=='undefined' && /[?&]still=1/.test(location.search));
 // Indicatifs proposés pour le contact de confiance. n = chiffres du numéro national (sans le 0 initial),
 // m = début d'un numéro de mobile (le SMS d'alerte doit pouvoir partir).
 const COUNTRIES=[
@@ -1903,6 +1902,9 @@ class Component extends DCLogic {
       call112:()=>openUrl('tel:112'), call17:()=>openUrl('tel:17'), callHero:()=>{ const t=this.heroE164(); if(t) openUrl('tel:'+t); },
       sheetBlocked:s.sheet==='blocked', sheetLegal:s.sheet==='legal', sheetDelete:s.sheet==='delete', sheetOpen:!!s.sheet, closeSheet:this.closeSheet,
       openBlocked:()=>this.openSheet('blocked'), openLegal:()=>this.openSheet('legal'), openDelete:()=>this.openSheet('delete'),
+      // Documents juridiques hébergés avec l'app (web/legal/) ; dans l'app iOS, ils s'ouvrent dans Safari.
+      openTerms:()=>{ try{ window.open(new URL('legal/conditions.html', location.href).href, '_blank'); }catch(_){} },
+      openPrivacy:()=>{ try{ window.open(new URL('legal/confidentialite.html', location.href).href, '_blank'); }catch(_){} },
       blockedLoading:s.sheet==='blocked'&&s.blocked===null, blockedEmpty:Array.isArray(s.blocked)&&s.blocked.length===0,
       blockedList:(s.blocked||[]).map(b=>({name:String(b.name||'').toUpperCase(), when:b.when||'', unblock:()=>this.unblock(b.id)})),
       deleteAccount:this.deleteAccount, deleteLabel:s.delBusy?'SUPPRESSION…':'SUPPRIMER DÉFINITIVEMENT',

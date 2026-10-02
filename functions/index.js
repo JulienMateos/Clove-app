@@ -210,14 +210,15 @@ export const getProfile = callable(async (d, uid) => {
 
 export const deleteAccount = callable(async (d, uid) => {
   await withSession(uid, (tx, s) => fail(tx, s, uid, 'account-deleted')).catch(() => {});
-  const [sessions, matches, pairs, reports] = await Promise.all([
+  const [sessions, matches, pairs, reports, alerts] = await Promise.all([
     db.collection('sessions').where('users', 'array-contains', uid).get(),
     db.collection('matches').where('users', 'array-contains', uid).get(),
     db.collection('pairs').where('users', 'array-contains', uid).get(),
     db.collection('reports').where('reporter_id', '==', uid).get(),
+    db.collection('alerts').where('user_id', '==', uid).get(),
   ]);
   const batch = db.batch();
-  for (const snap of [sessions, matches, pairs, reports]) for (const doc of snap.docs) batch.delete(doc.ref);
+  for (const snap of [sessions, matches, pairs, reports, alerts]) for (const doc of snap.docs) batch.delete(doc.ref);
   batch.delete(presenceRef(uid));
   await batch.commit();
   await db.recursiveDelete(userRef(uid));

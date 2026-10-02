@@ -64,7 +64,8 @@ const FIREBASE_CONFIG = {
     [data-clove-device] { position: fixed !important; left: var(--clove-x, 0px) !important; top: 0 !important;
                           transform: scale(var(--clove-k, 1)) !important; transform-origin: 0 0 !important;
                           border-radius: 0 !important; box-shadow: none !important; }
-    [data-clove-device] > [data-clove-fake] { display: none !important; }`;
+    [data-clove-device] > [data-clove-fake] { display: none !important; }
+    [data-clove-device] * { overscroll-behavior: none; }  /* pas d'effet élastique quand on glisse */`;
 
   function applyAppMode() {
     if (!document.head) return;
