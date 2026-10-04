@@ -88,16 +88,47 @@ const FIREBASE_CONFIG = {
     while (keep.parentElement && keep.parentElement.style.minHeight !== '100vh') keep = keep.parentElement;
     if (keep.parentElement) { keep.parentElement.setAttribute('data-clove-wrap', ''); keep.setAttribute('data-clove-keep', ''); }
   }
-  // Échelle : largeur du téléphone, et la plus grande hauteur vue (le clavier ne doit pas rétrécir l'app).
+  // Échelle : largeur du téléphone, et la plus grande hauteur vue (le clavier ne doit pas rétrécir l'app),
+  // moins la marge basse de l'iPhone (barre d'accueil, coins arrondis) pour que les boutons du bas
+  // — « SUIVANT », etc. — ne soient jamais rognés par le bord de l'écran.
   let maxH = 0;
+  function safeBottom() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;bottom:0;height:0;padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden';
+    (document.body || document.documentElement).appendChild(probe);
+    const v = probe.offsetHeight; probe.remove(); return v;
+  }
   function fit() {
     const W = window.innerWidth, H = (maxH = Math.max(maxH, window.innerHeight));
-    const k = Math.min(W / 402, H / 874);
+    const k = Math.min((W - 8) / 402, (H - Math.max(safeBottom(), 16)) / 874);
     document.documentElement.style.setProperty('--clove-k', k.toFixed(4));
     document.documentElement.style.setProperty('--clove-x', ((W - 402 * k) / 2).toFixed(1) + 'px');
   }
+  // Écran d'attente au lancement : même fond et même logo que l'écran de démarrage iOS, tant que l'app
+  // n'est pas prête (décor masqué et, si tu as déjà un compte, profil retrouvé). Évite le flash d'une
+  // autre page pendant une demi-seconde.
+  const LOGO = '<svg width="150" viewBox="0 0 240 266" ><polygon points="10,168 120,246 120,258 10,180" fill="#B53A08" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="120,246 230,168 230,180 120,258" fill="#0D2C70" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="10,120 40,94 65,140" fill="#E24B0B" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="40,94 78,94 65,140" fill="#123C96" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="78,94 120,120 65,140" fill="#E24B0B" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="120,120 162,94 175,140" fill="#123C96" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="162,94 200,94 175,140" fill="#F4EDE0" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="200,94 230,120 175,140" fill="#123C96" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="10,120 65,140 10,168" fill="#123C96" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="65,140 120,120 120,162" fill="#E24B0B" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="120,120 175,140 120,162" fill="#F4EDE0" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="175,140 230,120 230,168" fill="#123C96" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="10,168 65,140 65,200" fill="#E24B0B" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="65,140 120,162 65,200" fill="#F4EDE0" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="120,162 120,200 65,200" fill="#123C96" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="120,162 175,140 175,200" fill="#E24B0B" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="120,162 175,200 120,200" fill="#123C96" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="175,140 230,168 175,200" fill="#E24B0B" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="10,168 65,200 120,246" fill="#10182E" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="65,200 120,200 120,246" fill="#123C96" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="120,200 175,200 120,246" fill="#E24B0B" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="175,200 230,168 120,246" fill="#10182E" stroke="#10182E" stroke-width="5" stroke-linejoin="round"></polygon><polygon points="10,120 40,94 78,94 120,120 162,94 200,94 230,120 230,180 120,258 10,180" fill="none" stroke="#10182E" stroke-width="7" stroke-linejoin="round"></polygon><path d="M120 150 C110 122 84 100 84 58 A36 36 0 0 1 156 58 C156 100 130 122 120 150 Z" fill="#E24B0B" stroke="#10182E" stroke-width="6" stroke-linejoin="round"></path><path d="M120 150 C130 122 156 100 156 58 A36 36 0 0 0 120 22 L120 150 Z" fill="#C43E07"></path><path d="M120 150 C110 122 84 100 84 58 A36 36 0 0 1 156 58 C156 100 130 122 120 150 Z" fill="none" stroke="#10182E" stroke-width="6" stroke-linejoin="round"></path><circle cx="120" cy="58" r="18" fill="none" stroke="#F4EDE0" stroke-width="10"></circle></svg>';
+  let coverDone = false, profileChecked = false;
+  const ready = () => !!document.querySelector('[data-clove-device]') && profileChecked;
+  function cover() {
+    if (coverDone || !document.body) return;
+    let c = document.getElementById('clove-cover');
+    if (!c) {
+      c = document.createElement('div'); c.id = 'clove-cover';
+      c.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#F8F5EE;display:flex;align-items:center;justify-content:center;transition:opacity .25s ease';
+      c.innerHTML = LOGO; document.body.appendChild(c);
+    }
+    if (ready()) {
+      coverDone = true;
+      setTimeout(() => { c.style.opacity = '0'; setTimeout(() => c.remove(), 300); }, 120); // laisse l'écran se dessiner
+    }
+  }
+  window.__cloveProfileChecked = () => { profileChecked = true; };
+  setTimeout(() => { profileChecked = true; }, 4000); // jamais bloqué plus de 4 s (réseau lent)
+
   if (APP_MODE) {
-    applyAppMode(); setInterval(applyAppMode, 250);
+    // Le chargeur de index.html remplace le document : on réapplique l'échelle si elle a disparu.
+    applyAppMode(); setInterval(() => { applyAppMode(); if (!document.documentElement.style.getPropertyValue('--clove-k')) fit(); cover(); }, 50);
     fit(); window.addEventListener('resize', fit);
     window.addEventListener('orientationchange', () => { maxH = 0; setTimeout(fit, 300); });
   }
@@ -205,6 +236,8 @@ const FIREBASE_CONFIG = {
     clearInterval(beat); geoWatch = null; beat = null;
   }
 
+  function profileDone() { if (window.__cloveProfileChecked) window.__cloveProfileChecked(); }
+
   // ── Sortant ────────────────────────────────────────────────────────────
   window.CloveAPI = {
     live: false, // passe à true dès que la connexion Firebase est prête (voir plus bas)
@@ -268,7 +301,7 @@ const FIREBASE_CONFIG = {
   };
 
   // ── Démarrage ──────────────────────────────────────────────────────────
-  if (!config || qs.has('demo') || qs.has('offline')) return; // mode démo
+  if (!config || qs.has('demo') || qs.has('offline')) { profileDone(); return; } // mode démo
 
   const base = (document.currentScript && document.currentScript.src) || location.href;
   const load = (src) => new Promise((ok, ko) => {
@@ -296,9 +329,9 @@ const FIREBASE_CONFIG = {
       listen(db);
       invoke('listMatches', {}).then((m) => m && emit('matches', m)); // historique (vide avant l'onboarding)
       // On se souvient de toi : profil déjà enregistré → l'app reprend sur le radar.
-      invoke('getProfile', {}).then((r) => r && r.profile && emit('profile', r.profile));
+      invoke('getProfile', {}).then((r) => { if (r && r.profile) emit('profile', r.profile); profileDone(); });
     });
-  }).catch(() => console.info('[CloveAPI] SDK Firebase introuvable — mode démo'));
+  }).catch(() => { console.info('[CloveAPI] SDK Firebase introuvable — mode démo'); profileDone(); });
 })();
 
 // ── Événements entrants (écrits par les Cloud Functions dans users/{uid}/events) ──
