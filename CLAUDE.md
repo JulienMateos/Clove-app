@@ -14,6 +14,7 @@ Le seul travail : **brancher un backend** via `web/clove-api.js`.
 web/
   index.html     ← l'app (NE PAS MODIFIER — fichier compilé)
   clove-api.js   ← pont UI ⇄ backend (LE fichier à modifier)
+  clove-i18n.js  ← traduction FR / ES / EN + page de choix de la langue (chargé par clove-api.js)
 functions/       ← backend Firebase (Cloud Functions) — voir FIREBASE.md
 ios/             ← app SwiftUI (WKWebView) pour Xcode — voir ios/README.md
 ```

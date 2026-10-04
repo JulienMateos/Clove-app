@@ -35,6 +35,11 @@ struct CloveWebView: UIViewRepresentable {
         web.backgroundColor = .clear
         web.scrollView.bounces = false
         web.scrollView.contentInsetAdjustmentBehavior = .never
+        // Pages fixes : pas de zoom au pincement ni de défilement de la page entière.
+        web.scrollView.minimumZoomScale = 1
+        web.scrollView.maximumZoomScale = 1
+        web.scrollView.pinchGestureRecognizer?.isEnabled = false
+        web.scrollView.isScrollEnabled = false
         #if DEBUG
         if #available(iOS 16.4, *) { web.isInspectable = true } // Safari → Développement → ton iPhone
         #endif

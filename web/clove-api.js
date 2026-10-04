@@ -35,6 +35,12 @@ const FIREBASE_CONFIG = {
   const STALE_EVENT_MS = 3 * 60 * 1000; // événements reçus app fermée : on ignore les vieux
 
   const qs = new URLSearchParams(location.search);
+  // Traduction (français / espagnol / anglais) et page de choix de la langue : voir clove-i18n.js.
+  (function () {
+    const s = document.createElement('script'); s.async = false;
+    s.src = new URL('clove-i18n.js', (document.currentScript && document.currentScript.src) || location.href).href;
+    document.head.appendChild(s);
+  })();
   const EMULATOR = qs.has('emulator');
   const FIXED = qs.has('lat') && qs.has('lng') ? { lat: +qs.get('lat'), lng: +qs.get('lng') } : null;
   const config = EMULATOR ? { apiKey: 'demo-key', projectId: 'demo-clove', appId: 'demo-app', storageBucket: 'demo-clove.appspot.com' } : FIREBASE_CONFIG;
@@ -61,9 +67,11 @@ const FIREBASE_CONFIG = {
     html, body { background: #F4F0E8 !important; height: 100% !important; overflow: hidden !important; overscroll-behavior: none; }
     [data-clove-wrap] { padding: 0 !important; gap: 0 !important; min-height: 0 !important; }
     [data-clove-wrap] > :not([data-clove-keep]) { display: none !important; }
-    [data-clove-device] { position: fixed !important; left: var(--clove-x, 0px) !important; top: 0 !important;
+    [data-clove-device] { position: fixed !important; left: 0 !important; top: 0 !important;
+                          width: 402px !important; height: var(--clove-h, 874px) !important;
                           transform: scale(var(--clove-k, 1)) !important; transform-origin: 0 0 !important;
                           border-radius: 0 !important; box-shadow: none !important; }
+    html, body { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; }  /* pas de zoom au pincement */
     [data-clove-device] > [data-clove-fake] { display: none !important; }
     [data-clove-device] * { overscroll-behavior: none; }  /* pas d'effet élastique quand on glisse */`;
 
@@ -76,7 +84,7 @@ const FIREBASE_CONFIG = {
       document.head.appendChild(style);
       const meta = document.querySelector('meta[name="viewport"]') || document.head.appendChild(document.createElement('meta'));
       meta.name = 'viewport';
-      meta.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
+      meta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
     }
     // Le cadre (ios-frame.jsx) n'a pas de classe : on le repère par sa forme.
     if (document.querySelector('[data-clove-device]')) return;
@@ -88,22 +96,19 @@ const FIREBASE_CONFIG = {
     while (keep.parentElement && keep.parentElement.style.minHeight !== '100vh') keep = keep.parentElement;
     if (keep.parentElement) { keep.parentElement.setAttribute('data-clove-wrap', ''); keep.setAttribute('data-clove-keep', ''); }
   }
-  // Échelle : largeur du téléphone, et la plus grande hauteur vue (le clavier ne doit pas rétrécir l'app),
-  // moins la marge basse de l'iPhone (barre d'accueil, coins arrondis) pour que les boutons du bas
-  // — « SUIVANT », etc. — ne soient jamais rognés par le bord de l'écran.
+  // Échelle : l'écran de l'app (402 px de large dans le design) remplit toute la largeur du téléphone,
+  // et sa hauteur s'adapte à celle de l'écran — pas de bandes vides sur les côtés ni en bas.
+  // On garde la plus grande hauteur vue : le clavier ne doit pas tasser l'app.
   let maxH = 0;
-  function safeBottom() {
-    const probe = document.createElement('div');
-    probe.style.cssText = 'position:fixed;bottom:0;height:0;padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden';
-    (document.body || document.documentElement).appendChild(probe);
-    const v = probe.offsetHeight; probe.remove(); return v;
-  }
   function fit() {
     const W = window.innerWidth, H = (maxH = Math.max(maxH, window.innerHeight));
-    const k = Math.min((W - 8) / 402, (H - Math.max(safeBottom(), 16)) / 874);
+    const k = W / 402;
     document.documentElement.style.setProperty('--clove-k', k.toFixed(4));
-    document.documentElement.style.setProperty('--clove-x', ((W - 402 * k) / 2).toFixed(1) + 'px');
+    document.documentElement.style.setProperty('--clove-h', (H / k).toFixed(1) + 'px');
   }
+  // Pas de zoom (pincement ou double-tap), sur Safari comme dans l'app.
+  ['gesturestart', 'gesturechange'].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));
+
   // Écran d'attente au lancement : même fond et même logo que l'écran de démarrage iOS, tant que l'app
   // n'est pas prête (décor masqué et, si tu as déjà un compte, profil retrouvé). Évite le flash d'une
   // autre page pendant une demi-seconde.

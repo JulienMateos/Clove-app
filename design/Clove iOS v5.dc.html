@@ -708,6 +708,7 @@ input[type=range]{accent-color:#E24B0B}
 <sc-if value="{{ showLockNote }}" hint-placeholder-val="{{ false }}"><p style="margin:0;padding:10px 12px;border:3px solid #10182E;background:#EFE4CE;font:600 13px/1.4 Archivo,sans-serif;color:#10182E;animation:cloveRise .25s ease">{{ shapeEditNote }}</p></sc-if>
 </div>
 <div style="margin-top:26px;display:flex;flex-direction:column;align-items:flex-start;gap:14px">
+<button onClick="{{ openLang }}" style="padding:0;background:transparent;border:0;font:600 14px Archivo,sans-serif;color:#10182E;cursor:pointer">Langue</button>
 <button onClick="{{ openBlocked }}" style="padding:0;background:transparent;border:0;font:600 14px Archivo,sans-serif;color:#10182E;cursor:pointer">Personnes bloquées</button>
 <button onClick="{{ openLegal }}" style="padding:0;background:transparent;border:0;font:600 14px Archivo,sans-serif;color:#10182E;cursor:pointer">Conditions &amp; confidentialité</button>
 <button onClick="{{ openDelete }}" style="padding:0;background:transparent;border:0;font:600 14px Archivo,sans-serif;color:#E24B0B;cursor:pointer">Supprimer mon compte</button>
@@ -1588,7 +1589,7 @@ class Component extends DCLogic {
   wP2Ref=React.createRef();
   openWelcome=()=>{ if(this._wAnim||this.state.wOpen) return; const g=this.wMosRef.current, p=this.wP2Ref.current; const logo=g&&g.querySelector('[data-logo]'); const svg=logo&&logo.querySelector('svg');
     if(STILL||!g||!p||!svg||!g.animate){ this.setState({wOpen:true,wDone:true}); return; }
-    this._wAnim=true; const gr=g.getBoundingClientRect(); const W=gr.width+60, H=gr.height+60;
+    this._wAnim=true; const gr=g.getBoundingClientRect(); const kk=gr.width?g.offsetWidth/gr.width:1; const W=g.offsetWidth+60, H=g.offsetHeight+60; // kk : écran → unités du design (app mise à l'échelle)
     const B=560, SL=1000, ZM=1050;
     svg.style.transformOrigin='50% 60%';
     svg.animate([{transform:'scale(1)'},{transform:'scale(1.14)',offset:.16},{transform:'scale(.96)',offset:.32},{transform:'scale(1.1)',offset:.5},{transform:'scale(1)'}],{duration:B,easing:'ease-in-out'});
@@ -1597,7 +1598,7 @@ class Component extends DCLogic {
       const lb=logo.getBoundingClientRect().bottom, E='cubic-bezier(.7,0,.2,1)';
       [...g.children].forEach(t=>{ if(t===logo) return; const r=t.getBoundingClientRect(); const e=2;
         if(r.bottom>=gr.bottom-e){ t.style.zIndex='3'; t.style.position='relative'; t.style.boxShadow='0 0 0 5px #10182E'; t.animate([{transform:'none'},{transform:'none',offset:.45},{transform:'translateX('+(-W)+'px)'}],{duration:SL,easing:E,fill:'forwards'}); return; }
-        if(r.top>=lb-e && r.left>gr.left+e){ const dy=gr.bottom-r.bottom; t.style.zIndex='1'; t.style.position='relative'; t.style.boxShadow='0 0 0 5px #10182E'; t.animate([{transform:'none'},{transform:'translateY('+dy+'px)',offset:.45,easing:E},{transform:'translate('+(-W)+'px,'+dy+'px)'}],{duration:SL,easing:E,fill:'forwards'}); return; }
+        if(r.top>=lb-e && r.left>gr.left+e){ const dy=(gr.bottom-r.bottom)*kk; t.style.zIndex='1'; t.style.position='relative'; t.style.boxShadow='0 0 0 5px #10182E'; t.animate([{transform:'none'},{transform:'translateY('+dy+'px)',offset:.45,easing:E},{transform:'translate('+(-W)+'px,'+dy+'px)'}],{duration:SL,easing:E,fill:'forwards'}); return; }
         const bot=r.bottom>=gr.bottom-e, lef=r.left<=gr.left+e, top=r.top<=gr.top+e, rig=r.right>=gr.right-e;
         const dB='translateX('+(-W)+'px)', dL='translateY('+(-H)+'px)', dT='translateX('+W+'px)', dR='translateY('+H+'px)';
         let tr; if(bot&&!rig) tr=dB; else if(lef) tr=dL; else if(top) tr=dT; else if(rig) tr=dR; else if(bot) tr=dB;
@@ -1606,8 +1607,8 @@ class Component extends DCLogic {
         t.animate([{transform:'none'},{transform:tr}],{duration:SL,easing:'cubic-bezier(.7,0,.2,1)',fill:'forwards'}); });
     },B);
     setTimeout(()=>{
-      const sr=svg.getBoundingClientRect(); const hx=sr.left+sr.width*120/240-gr.left, hy=sr.top+sr.height*58/266-gr.top, r0=sr.width*13/240;
-      const far=Math.max(Math.hypot(hx,hy),Math.hypot(gr.width-hx,hy),Math.hypot(hx,gr.height-hy),Math.hypot(gr.width-hx,gr.height-hy));
+      const sr=svg.getBoundingClientRect(); const hx=(sr.left+sr.width*120/240-gr.left)*kk, hy=(sr.top+sr.height*58/266-gr.top)*kk, r0=sr.width*13/240*kk; const gw=g.offsetWidth, gh=g.offsetHeight;
+      const far=Math.max(Math.hypot(hx,hy),Math.hypot(gw-hx,hy),Math.hypot(hx,gh-hy),Math.hypot(gw-hx,gh-hy));
       const S=far/r0*1.08, ease='cubic-bezier(.7,0,.16,1)', at=' at '+hx.toFixed(1)+'px '+hy.toFixed(1)+'px)';
       logo.style.boxShadow='none';
       g.style.transformOrigin=hx.toFixed(1)+'px '+hy.toFixed(1)+'px';
@@ -1758,9 +1759,17 @@ class Component extends DCLogic {
   getPos(){ return new Promise(res=>{ const known=call('lastPosition'); if(known) return res(known);
     if(!navigator.geolocation) return res(null); const t=setTimeout(()=>res(null),3000);
     navigator.geolocation.getCurrentPosition(p=>{ clearTimeout(t); res({lat:p.coords.latitude, lng:p.coords.longitude}); }, ()=>{ clearTimeout(t); res(null); }, {enableHighAccuracy:true, maximumAge:30000, timeout:3000}); }); }
-  alertBody(type,pos){ const s=this.state, nm=(s.name||'').trim()||'Moi', m=(s.matches||[])[0];
-    const lieu=m&&m.spot?'\n📍 Lieu : '+m.spot+(m.addr?' — '+m.addr:''):'';
-    const map=pos?'\n🗺️ Ma position : https://maps.google.com/?q='+pos.lat.toFixed(5)+','+pos.lng.toFixed(5):'';
+  alertBody(type,pos){ const s=this.state, m=(s.matches||[])[0];
+    const lg=(window.CloveI18n&&window.CloveI18n.lang)||'fr', L=(fr,es,en)=>lg==='es'?es:lg==='en'?en:fr;  // SMS dans la langue choisie
+    const nm=(s.name||'').trim()||L('Moi','Yo','Me');
+    const lieu=m&&m.spot?'\n📍 '+L('Lieu','Lugar','Place')+' : '+m.spot+(m.addr?' — '+m.addr:''):'';
+    const map=pos?'\n🗺️ '+L('Ma position','Mi ubicación','My location')+' : https://maps.google.com/?q='+pos.lat.toFixed(5)+','+pos.lng.toFixed(5):'';
+    if(lg==='es') return type==='danger'
+      ? '🚨 URGENTE — Soy '+nm+'. Estoy en peligro'+(m?' durante una cita Clove.':'.')+lieu+map+'\nLlámame ya. Si no contesto, llama al 112.'
+      : 'Soy '+nm+' (vía Clove). '+(m?'Mi cita es incómoda':'Estoy en una situación incómoda')+', nada grave.\nLlámame en 5 minutos con una excusa para que pueda irme.'+lieu+map;
+    if(lg==='en') return type==='danger'
+      ? '🚨 URGENT — It’s '+nm+'. I’m in danger'+(m?' on a Clove date.':'.')+lieu+map+'\nCall me right now. If I don’t answer, call 112 (emergency services).'
+      : 'It’s '+nm+' (via Clove). '+(m?'My date is awkward':'I’m in an awkward situation')+', nothing serious.\nCall me in 5 minutes with an excuse so I can leave.'+lieu+map;
     return type==='danger'
       ? '🚨 URGENT — C’est '+nm+'. Je suis en danger'+(m?' pendant un rendez-vous Clove.':'.')+lieu+map+'\nAppelle-moi tout de suite. Si je ne réponds pas, appelle le 17 (police) ou le 112.'
       : 'C’est '+nm+' (via Clove). '+(m?'Mon rendez-vous est gênant':'Je suis dans une situation gênante')+', rien de grave.\nAppelle-moi dans 5 minutes avec une excuse pour que je puisse partir.'+lieu+map; }
@@ -1899,9 +1908,10 @@ class Component extends DCLogic {
       dangerSub:'SMS avec ta position, puis appel direct à '+s.heroName.trim()+'.',
       awkSub:'Un SMS discret à '+s.heroName.trim()+' : il t’appelle avec une excuse.',
       alertText:()=>this.fireAlert('text'), alertDanger:()=>this.fireAlert('danger'), endAlert:this.endAlert,
-      call112:()=>openUrl('tel:112'), call17:()=>openUrl('tel:17'), callHero:()=>{ const t=this.heroE164(); if(t) openUrl('tel:'+t); },
+      call112:()=>openUrl('tel:112'), call17:()=>openUrl((window.CloveI18n&&window.CloveI18n.lang==='es')?'tel:091':'tel:17'),  // police : 091 en Espagne
+      callHero:()=>{ const t=this.heroE164(); if(t) openUrl('tel:'+t); },
       sheetBlocked:s.sheet==='blocked', sheetLegal:s.sheet==='legal', sheetDelete:s.sheet==='delete', sheetOpen:!!s.sheet, closeSheet:this.closeSheet,
-      openBlocked:()=>this.openSheet('blocked'), openLegal:()=>this.openSheet('legal'), openDelete:()=>this.openSheet('delete'),
+      openLang:()=>{ if(window.CloveI18n) window.CloveI18n.open(); }, openBlocked:()=>this.openSheet('blocked'), openLegal:()=>this.openSheet('legal'), openDelete:()=>this.openSheet('delete'),
       // Documents juridiques hébergés avec l'app (web/legal/) ; dans l'app iOS, ils s'ouvrent dans Safari.
       openTerms:()=>{ try{ window.open(new URL('legal/conditions.html', location.href).href, '_blank'); }catch(_){} },
       openPrivacy:()=>{ try{ window.open(new URL('legal/confidentialite.html', location.href).href, '_blank'); }catch(_){} },
