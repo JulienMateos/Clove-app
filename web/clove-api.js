@@ -51,6 +51,7 @@ const FIREBASE_CONFIG = {
   let fns = null; // firebase.functions() une fois prêt
   let auth = null;
   let uid = null;
+  let restoreTried = false; // reconnexion Apple automatique : une seule tentative par lancement
 
   // ── Mode app : plein écran sur téléphone ───────────────────────────────
   // index.html est la page de présentation du design : bandeau « CLOVE · iOS · V5 » + iPhone dessiné
@@ -142,7 +143,10 @@ const FIREBASE_CONFIG = {
   // La WebView affiche la feuille native « Se connecter avec Apple » et renvoie le jeton ;
   // Firebase rattache alors le compte anonyme au compte Apple (le profil est conservé).
   const pending = {};
-  window.__cloveNative = (type, data) => { const p = pending[type]; delete pending[type]; if (p) p(data); };
+  window.__cloveNative = (type, data) => {
+    const p = pending[type]; delete pending[type]; if (p) return p(data);
+    const h = window.__cloveNativeEvents && window.__cloveNativeEvents[type]; if (h) h(data);
+  };
   const isApple = (u) => !!u && u.providerData.some((p) => p.providerId === 'apple.com');
 
   function askNativeApple(rawNonce) {
@@ -167,6 +171,26 @@ const FIREBASE_CONFIG = {
     }
     return auth.signInWithCredential(cred);
   }
+
+  // ── App iOS : notifications, radar en arrière-plan ─────────────────────
+  // registerDevice donne une clé d'appareil : l'app native s'en sert pour envoyer la position au serveur
+  // (fonction bgLocation) quand Clove est en arrière-plan ou fermée, tant que le radar est allumé.
+  const post = (msg) => { try { window.webkit.messageHandlers.clove.postMessage(msg); } catch (_) {} };
+  let deviceKey = null, radarOn = false;
+  const lang = () => (window.CloveI18n && window.CloveI18n.lang) || 'fr';
+  const bgUrl = () => EMULATOR
+    ? `http://${location.hostname || '127.0.0.1'}:5001/${config.projectId}/${REGION}/bgLocation`
+    : `https://${REGION}-${config.projectId}.cloudfunctions.net/bgLocation`;
+  window.__cloveNativeEvents = {
+    pushToken: (d) => invoke('registerDevice', { pushToken: d.token, env: d.env, lang: lang() }),
+  };
+  async function registerDevice() {
+    if (!NATIVE || !NATIVE.background) return;
+    const r = await invoke('registerDevice', { lang: lang() });
+    if (r && r.key) { deviceKey = r.key; if (radarOn) nativeRadar(true); }
+  }
+  function askPush() { if (NATIVE && NATIVE.push) post({ type: 'push' }); }
+  function nativeRadar(on) { radarOn = on; if (NATIVE && NATIVE.background) post({ type: 'radar', on, key: deviceKey, url: bgUrl() }); }
 
   async function ensureApple() {
     if (!NATIVE || !NATIVE.apple || !auth || isApple(auth.currentUser)) return;
@@ -253,12 +277,14 @@ const FIREBASE_CONFIG = {
       await ensureApple(); // app iOS : connexion Apple à la fin de l'onboarding (annulable)
       const r = await invoke('saveProfile', { ...p, photo: await toJpegDataURL(p.photo) });
       if (r) invoke('listMatches', {}).then((m) => m && emit('matches', m));
+      if (r) { registerDevice(); askPush(); } // app iOS : notifications dès que le profil existe
       return r;
     },
 
     // Tap sur le cœur du radar. { mode:'ghost'|'full', radius:number (m) }
     setAvailability(p) {
       if (p.mode === 'full') startLocating(); else stopLocating();
+      nativeRadar(p.mode === 'full'); // app iOS : la position continue en arrière-plan
       return invoke('setAvailability', { mode: p.mode, radius: p.radius, ...(lastPos || {}) });
     },
 
@@ -294,6 +320,7 @@ const FIREBASE_CONFIG = {
     // Profil → Supprimer mon compte : efface tout côté serveur, puis repart sur un compte neuf.
     async deleteAccount() {
       const r = await invoke('deleteAccount', {});
+      if (r) { post({ type: 'signedOut' }); deviceKey = null; }
       if (r && auth) await auth.signOut().catch(() => {});
       return r;
     },
@@ -326,7 +353,13 @@ const FIREBASE_CONFIG = {
       functions.useEmulator(host, 5001);
     }
     auth.onAuthStateChanged((user) => {
-      if (!user) { auth.signInAnonymously().catch((e) => console.warn('[CloveAPI] connexion:', e.message)); return; }
+      if (!user) {
+        // App réinstallée : le compte Apple utilisé avant sur ce téléphone est dans le trousseau
+        // → on s'y reconnecte directement (Face ID). Sinon, ou si c'est annulé : compte anonyme neuf.
+        const anon = () => auth.signInAnonymously().catch((e) => console.warn('[CloveAPI] connexion:', e.message));
+        if (NATIVE && NATIVE.appleUser && !restoreTried) { restoreTried = true; appleSignIn().catch(anon); } else anon();
+        return;
+      }
       if (uid === user.uid) return;
       uid = user.uid;
       fns = functions;
@@ -334,7 +367,10 @@ const FIREBASE_CONFIG = {
       listen(db);
       invoke('listMatches', {}).then((m) => m && emit('matches', m)); // historique (vide avant l'onboarding)
       // On se souvient de toi : profil déjà enregistré → l'app reprend sur le radar.
-      invoke('getProfile', {}).then((r) => { if (r && r.profile) emit('profile', r.profile); profileDone(); });
+      invoke('getProfile', {}).then((r) => {
+        if (r && r.profile) { emit('profile', r.profile); registerDevice(); askPush(); }
+        profileDone();
+      });
     });
   }).catch(() => { console.info('[CloveAPI] SDK Firebase introuvable — mode démo'); profileDone(); });
 })();

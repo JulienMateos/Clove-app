@@ -191,8 +191,23 @@ assert.equal(prof.emergency.phone, '+33612345678');
 assert.match(prof.photo, /^data:image\/png;base64,/);
 assert.equal((await anon.call('getProfile')).profile, null);
 
+// ── App iOS : appareil, position en arrière-plan ──
+const BG = 'http://127.0.0.1:5001/demo-clove/europe-west1/bgLocation';
+const dev = await ana.call('registerDevice', { pushToken: 'ab'.repeat(32), env: 'sandbox', lang: 'es' });
+assert.match(dev.key, /^[0-9a-f]{48}$/);
+assert.equal((await ana.call('registerDevice', {})).key, dev.key, 'same key on every launch');
+const anaU = (await admin.doc(`users/${ana.uid}`).get()).data();
+assert.equal(anaU.push.env, 'sandbox'); assert.equal(anaU.lang, 'es');
+const post = (body) => fetch(BG, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+assert.equal((await post({ key: 'f'.repeat(48), lat: 1, lng: 1 })).status, 404);
+assert.equal((await post({ key: dev.key, lat: 999, lng: 1 })).status, 400);
+assert.equal((await post({ key: dev.key, lat: 48.8601, lng: 2.3401 })).status, 200);
+assert.equal((await admin.doc(`presence/${ana.uid}`).get()).get('lat'), 48.8601);
+
 // ── Account deletion ──
 await max.call('deleteAccount');
+await ana.call('deleteAccount');
+assert.equal((await admin.doc(`devices/${dev.key}`).get()).exists, false);
 assert.equal((await admin.doc(`users/${max.uid}`).get()).exists, false);
 
 for (const c of [anon, emma, leo, zoe, tom, ana, max, ines, hugo]) c.unsub();

@@ -210,7 +210,7 @@
     ['PRENDRE OU CHOISIR UNE PHOTO', 'HACER O ELEGIR UNA FOTO', 'TAKE OR CHOOSE A PHOTO'],
     ['CONVERSION DE LA PHOTO…', 'CONVIRTIENDO LA FOTO…', 'CONVERTING PHOTO…'],
     ['FORMAT ILLISIBLE · RÉESSAIE', 'FORMATO ILEGIBLE · REINTÉNTALO', 'UNREADABLE FORMAT · TRY AGAIN'],
-    ['GLISSE POUR CADRER', 'DESLIZA PARA ENCUADRAR', 'DRAG TO FRAME'],
+    ['GLISSE · PINCE POUR ZOOMER', 'DESLIZA · PELLIZCA PARA ZOOM', 'DRAG · PINCH TO ZOOM'],
     ['Changer de photo', 'Cambiar de foto', 'Change photo'],
     ['TRANSFORMER →', 'TRANSFORMAR →', 'TRANSFORM →'],
     ['Sans photo, ton avatar reste abstrait. Tu pourras en ajouter une plus tard depuis ton profil.',

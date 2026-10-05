@@ -18,7 +18,10 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { getAuth } from 'firebase-admin/auth';
 import { setGlobalOptions } from 'firebase-functions/v2';
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { defineSecret } from 'firebase-functions/params';
+import crypto from 'node:crypto';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { geohashForLocation, geohashQueryBounds, distanceBetween } from 'geofire-common';
 import {
@@ -27,6 +30,7 @@ import {
   REPORT_REASONS, MEETING_SPOTS, SPOT_MAX_DISTANCE_M,
 } from './constants.js';
 import { moderateText, moderatePhoto } from './moderation.js';
+import { pushText, sendPush } from './push.js';
 
 initializeApp();
 const db = getFirestore();
@@ -220,6 +224,8 @@ export const deleteAccount = callable(async (d, uid) => {
   const batch = db.batch();
   for (const snap of [sessions, matches, pairs, reports, alerts]) for (const doc of snap.docs) batch.delete(doc.ref);
   batch.delete(presenceRef(uid));
+  const key = (await userRef(uid).get()).data()?.device_key;
+  if (key) batch.delete(db.doc(`devices/${key}`));
   await batch.commit();
   await db.recursiveDelete(userRef(uid));
   await bucket().deleteFiles({ prefix: `photos/${uid}/` });
@@ -229,7 +235,9 @@ export const deleteAccount = callable(async (d, uid) => {
 
 // ---- Radar ---------------------------------------------------------------
 // setAvailability {mode, radius} and periodic position updates {lat, lng}.
-export const setAvailability = callable(async (d, uid) => {
+export const setAvailability = callable((d, uid) => updatePresence(uid, d));
+
+async function updatePresence(uid, d) {
   const patch = { updated_at: Date.now() };
   if (d.mode != null) {
     if (![MODE.GHOST, MODE.FULL].includes(d.mode)) bad('mode invalide');
@@ -246,6 +254,53 @@ export const setAvailability = callable(async (d, uid) => {
   const p = (await presenceRef(uid).get()).data();
   if (p.mode === MODE.FULL) await scanForMatch(uid, p);
   return { mode: p.mode, radius: p.radius, located: p.lat != null };
+}
+
+// ---- App iOS : arrière-plan et notifications ----------------------------
+// L'app enregistre son appareil : jeton de notification (APNs), langue, et reçoit une clé d'appareil
+// qui lui permet d'envoyer sa position quand l'app est en arrière-plan ou fermée (bgLocation).
+export const registerDevice = callable(async (d, uid) => {
+  const u = (await userRef(uid).get()).data() || {};
+  let key = u.device_key;
+  if (!key) {
+    key = crypto.randomBytes(24).toString('hex');
+    await db.doc(`devices/${key}`).set({ uid, created_at: Date.now() });
+  }
+  const patch = { device_key: key };
+  if (typeof d.pushToken === 'string' && /^[0-9a-f]{32,200}$/i.test(d.pushToken)) {
+    patch.push = { token: d.pushToken, env: d.env === 'sandbox' ? 'sandbox' : 'production', at: Date.now() };
+  }
+  if (['fr', 'es', 'en'].includes(d.lang)) patch.lang = d.lang;
+  await userRef(uid).set(patch, { merge: true });
+  return { key };
+}, { needProfile: false });
+
+// Position envoyée par l'app iOS en arrière-plan : POST { key, lat, lng }. Ne change jamais le mode
+// (seul l'utilisateur allume / éteint le radar) ; met la présence à jour et cherche un match.
+export const bgLocation = onRequest(async (req, res) => {
+  if (req.method !== 'POST') return res.status(405).end();
+  const { key } = req.body || {};
+  const c = coordsOf(req.body || {});
+  if (typeof key !== 'string' || !/^[0-9a-f]{48}$/.test(key) || !c) return res.status(400).end();
+  const dev = await db.doc(`devices/${key}`).get();
+  if (!dev.exists) return res.status(404).end(); // compte supprimé : l'app arrête d'envoyer
+  const r = await updatePresence(dev.data().uid, c).catch((e) => { console.warn('[bgLocation]', e.message); return null; });
+  res.json({ mode: r ? r.mode : null });
+});
+
+// Chaque événement de l'UI qui compte (demande, défi, décision, match) part aussi en notification :
+// l'utilisateur est prévenu même téléphone verrouillé ou app fermée.
+const APNS_KEY = defineSecret('APNS_KEY');
+export const pushOnEvent = onDocumentCreated({ document: 'users/{uid}/events/{eventId}', secrets: [APNS_KEY] }, async (ev) => {
+  const e = ev.data?.data();
+  if (!e) return;
+  const u = (await userRef(ev.params.uid).get()).data();
+  if (!u?.push?.token) return;
+  const txt = pushText(e.type, e.data, u.lang);
+  if (!txt) return;
+  const r = await sendPush({ deviceToken: u.push.token, env: u.push.env, type: e.type, ...txt },
+    { keyPem: APNS_KEY.value(), keyId: process.env.APNS_KEY_ID, teamId: process.env.APPLE_TEAM_ID });
+  if (r === 'gone') await userRef(ev.params.uid).update({ push: FieldValue.delete() });
 });
 
 const attracted = (attraction, gender) => attraction === ATTRACTION.LES_DEUX || attraction === gender;

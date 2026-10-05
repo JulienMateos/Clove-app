@@ -12,6 +12,11 @@
 		<key>UIImageRespectsSafeAreaInsets</key>
 		<true/>
 	</dict>
+	<!-- Radar allumé : la position continue d'être envoyée écran verrouillé ou app fermée. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<!-- Chiffrement : HTTPS uniquement (exempté) → plus de « Missing Compliance » sur TestFlight. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

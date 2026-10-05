@@ -39,6 +39,26 @@ Prérequis : Xcode avec la plateforme **iOS** installée (*Xcode → Settings �
 Si la personne annule la feuille Apple, son profil est quand même enregistré sur un compte anonyme,
 et la feuille lui sera reproposée à la prochaine fin d'onboarding.
 
+## Notifications push (une fois)
+Gratuit, inclus dans le compte Apple Developer. Sans ces réglages, l'app marche mais sans notifications.
+1. https://developer.apple.com/account/resources/authkeys/list → **+** → nom « Clove APNs » → coche
+   **Apple Push Notifications service (APNs)** → *Continue* → *Register* → **Download** (fichier `AuthKey_XXXXXXXXXX.p8`,
+   téléchargeable une seule fois : garde-le). Note le **Key ID** (10 caractères).
+2. Ton **Team ID** : https://developer.apple.com/account → *Membership details* → Team ID.
+3. Dans `functions/.env` : `APNS_KEY_ID=<Key ID>` et `APPLE_TEAM_ID=<Team ID>`.
+4. Le fichier `.p8` en secret Firebase (jamais dans git) :
+   `npx firebase functions:secrets:set APNS_KEY --data-file ~/Downloads/AuthKey_XXXXXXXXXX.p8`
+5. `npm run deploy`.
+
+## Radar en arrière-plan
+Radar allumé, l'app continue d'envoyer ta position écran verrouillé ou app fermée (iOS la relance après un
+déplacement). iOS demande d'abord « Pendant l'utilisation », puis propose « Toujours » : choisis **Toujours**.
+Téléphone éteint : rien ne tourne (aucune app ne le peut). Éteindre le radar arrête tout.
+
+## Compte gardé après suppression de l'app
+Le compte Apple utilisé sur le téléphone est gardé dans le trousseau iOS. Après réinstallation, l'app
+propose directement « Continuer avec Apple » (Face ID) au lancement et retrouve ton profil.
+
 ## TestFlight (tes testeurs)
 
 1. En haut d'Xcode, choisis **Any iOS Device (arm64)** à la place de ton iPhone.

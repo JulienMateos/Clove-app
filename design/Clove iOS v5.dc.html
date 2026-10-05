@@ -376,16 +376,16 @@ input[type=range]{accent-color:#E24B0B}
 </sc-if>
 <sc-if value="{{ hasPhoto }}" hint-placeholder-val="{{ false }}">
 <div ref="{{ cropRef }}" onPointerDown="{{ onCropDown }}" onPointerMove="{{ onCropMove }}" onPointerUp="{{ onCropUp }}" onPointerCancel="{{ onCropUp }}" style="position:relative;width:100%;aspect-ratio:1;max-width:300px;align-self:center;margin-top:4px;overflow:hidden;border:3px solid #10182E;background:#10182E;box-shadow:5px 5px 0 #10182E;touch-action:none;cursor:grab;user-select:none">
-<span style="position:absolute;inset:0;background:{{ cropBg }};background-size:cover;background-position:center;background-repeat:no-repeat;transform:{{ cropTr }};pointer-events:none"></span>
+<span style="position:absolute;left:50%;top:50%;width:{{ cropW }};height:{{ cropH }};background:{{ cropBg }};background-size:100% 100%;background-repeat:no-repeat;transform:{{ cropTr }};pointer-events:none"></span>
 <span style="position:absolute;left:33.33%;top:0;bottom:0;width:1.5px;background:rgba(244,240,232,.7);pointer-events:none"></span>
 <span style="position:absolute;left:66.66%;top:0;bottom:0;width:1.5px;background:rgba(244,240,232,.7);pointer-events:none"></span>
 <span style="position:absolute;top:33.33%;left:0;right:0;height:1.5px;background:rgba(244,240,232,.7);pointer-events:none"></span>
 <span style="position:absolute;top:66.66%;left:0;right:0;height:1.5px;background:rgba(244,240,232,.7);pointer-events:none"></span>
-<span style="position:absolute;left:8px;bottom:8px;padding:4px 7px;background:#10182E;color:#F4F0E8;font:700 9.5px 'IBM Plex Mono',monospace;letter-spacing:.14em;pointer-events:none">GLISSE POUR CADRER</span>
+<span style="position:absolute;left:8px;bottom:8px;padding:4px 7px;background:#10182E;color:#F4F0E8;font:700 9.5px 'IBM Plex Mono',monospace;letter-spacing:.14em;pointer-events:none">GLISSE · PINCE POUR ZOOMER</span>
 </div>
 <div style="display:flex;align-items:center;gap:12px;width:100%;max-width:300px;align-self:center">
 <span style="font:900 20px/1 Archivo,sans-serif;color:#10182E">−</span>
-<input type="range" min="1" max="3" step="0.01" value="{{ cropZ }}" onChange="{{ onCropZoom }}" style="flex:1;touch-action:none">
+<input type="range" min="{{ cropMin }}" max="4" step="0.01" value="{{ cropZ }}" onChange="{{ onCropZoom }}" style="flex:1;touch-action:none">
 <span style="font:900 20px/1 Archivo,sans-serif;color:#10182E">+</span>
 </div>
 <label style="align-self:center;padding:0 0 3px;border-bottom:2px solid #10182E;font:700 13px Archivo,sans-serif;color:#10182E;cursor:pointer">Changer de photo<input type="file" accept="image/*,.heic,.heif,.HEIC,.HEIF" onChange="{{ onPhotoFile }}" style="display:none"></label>
@@ -1646,20 +1646,40 @@ class Component extends DCLogic {
     try{ url=await this.toJpeg(f); }
     catch(_){ try{ const h2a=await this.loadHeic(); let out=await h2a({blob:f,toType:'image/jpeg',quality:0.9}); if(Array.isArray(out)) out=out[0]; url=await this.toJpeg(out); }catch(__){ url=null; } }
     if(!url){ this.setState({photoBusy:false, photoErr:true}); return; }
-    this.setState({photoUrl:url, photoRaw:url, cropTx:0, cropTy:0, cropZ:1, photoBusy:false});
-    const im=new Image(); im.onload=()=>this.setState({photoW:im.naturalWidth, photoH:im.naturalHeight}); im.src=url; this.processPhoto(url); };
+    this.setState({photoUrl:url, photoRaw:url, cropTx:0, cropTy:0, cropZ:1, photoW:0, photoH:0, photoBusy:false});
+    // Départ : photo entière visible (dézoom maximal) ; on zoome ensuite au curseur ou à deux doigts.
+    const im=new Image(); im.onload=()=>{ const w=im.naturalWidth, h=im.naturalHeight; this.setState({photoW:w, photoH:h, cropZ:this.cropMinOf(w,h)}); }; im.src=url; this.processPhoto(url); };
   cropRef=React.createRef();
   clampCrop(tx,ty,z){ const el=this.cropRef.current; const F=el?el.clientWidth:300; const w=this.state.photoW, hh=this.state.photoH; if(!w) return [0,0];
     const s0=Math.max(F/w,F/hh), mx=Math.max(0,(w*s0*z-F)/2), my=Math.max(0,(hh*s0*z-F)/2); return [Math.max(-mx,Math.min(mx,tx)), Math.max(-my,Math.min(my,ty))]; }
-  onCropDown=(e)=>{ try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){} this._cp={x:e.clientX,y:e.clientY,tx:this.state.cropTx||0,ty:this.state.cropTy||0}; };
-  onCropMove=(e)=>{ if(!this._cp) return; const el=this.cropRef.current; const r=el?el.getBoundingClientRect():null; const k=r&&r.width?el.offsetWidth/r.width:1;
-    const [tx,ty]=this.clampCrop(this._cp.tx+(e.clientX-this._cp.x)*k, this._cp.ty+(e.clientY-this._cp.y)*k, this.state.cropZ||1); this.setState({cropTx:tx,cropTy:ty}); };
-  onCropUp=()=>{ this._cp=null; };
-  onCropZoom=(e)=>{ const z=Number(e.target.value); const [tx,ty]=this.clampCrop(this.state.cropTx||0,this.state.cropTy||0,z); this.setState({cropZ:z,cropTx:tx,cropTy:ty}); };
+  // Zoom relatif au « remplissage » du carré (1) : du plus petit (photo entière visible) à 4.
+  cropMinOf(w,h){ return w&&h?Math.min(w,h)/Math.max(w,h):1; }
+  zClamp(z){ return Math.max(this.cropMinOf(this.state.photoW,this.state.photoH), Math.min(4, z)); }
+  // Un doigt : déplacer. Deux doigts : pincer pour zoomer/dézoomer autour du point entre les doigts.
+  cropStart(){ const el=this.cropRef.current; const r=el?el.getBoundingClientRect():null; const k=r&&r.width?el.offsetWidth/r.width:1;
+    const pts=[...this._pts.values()], s=this.state;
+    const base={k, r, tx:s.cropTx||0, ty:s.cropTy||0, z:s.cropZ||1};
+    if(pts.length>=2){ const [a,b]=pts; base.d=Math.hypot(a.x-b.x,a.y-b.y)||1; base.mx=(a.x+b.x)/2; base.my=(a.y+b.y)/2; }
+    else if(pts.length===1){ base.x=pts[0].x; base.y=pts[0].y; }
+    this._cp=base; }
+  onCropDown=(e)=>{ try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){} if(!this._pts) this._pts=new Map();
+    this._pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); this.cropStart(); };
+  onCropMove=(e)=>{ if(!this._cp||!this._pts||!this._pts.has(e.pointerId)) return; this._pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    const c=this._cp, pts=[...this._pts.values()];
+    if(pts.length>=2 && c.d){ const [a,b]=pts; const z=this.zClamp(c.z*Math.hypot(a.x-b.x,a.y-b.y)/c.d);
+      const cx=c.r?c.r.left+c.r.width/2:0, cy=c.r?c.r.top+c.r.height/2:0;
+      const m0x=(c.mx-cx)*c.k, m0y=(c.my-cy)*c.k, mx=((a.x+b.x)/2-cx)*c.k, my=((a.y+b.y)/2-cy)*c.k;
+      const [tx,ty]=this.clampCrop(mx-(m0x-c.tx)*z/c.z, my-(m0y-c.ty)*z/c.z, z); this.setState({cropZ:z,cropTx:tx,cropTy:ty}); return; }
+    if(c.x==null) return;
+    const [tx,ty]=this.clampCrop(c.tx+(e.clientX-c.x)*c.k, c.ty+(e.clientY-c.y)*c.k, this.state.cropZ||1); this.setState({cropTx:tx,cropTy:ty}); };
+  onCropUp=(e)=>{ if(this._pts&&e) this._pts.delete(e.pointerId); if(this._pts&&this._pts.size) this.cropStart(); else this._cp=null; };
+  onCropZoom=(e)=>{ const z=this.zClamp(Number(e.target.value)); const [tx,ty]=this.clampCrop(this.state.cropTx||0,this.state.cropTy||0,z); this.setState({cropZ:z,cropTx:tx,cropTy:ty}); };
   applyCrop(done){ const s=this.state, el=this.cropRef.current; if(!s.photoRaw||!s.photoW||!el){ done(); return; }
     const F=el.clientWidth, w=s.photoW, hh=s.photoH, z=s.cropZ||1, sc=Math.max(F/w,F/hh)*z;
     const sw=F/sc, sx=w/2+(-F/2-(s.cropTx||0))/sc, sy=hh/2+(-F/2-(s.cropTy||0))/sc;
-    const img=new Image(); img.onload=()=>{ const c=document.createElement('canvas'); c.width=c.height=900; c.getContext('2d').drawImage(img,sx,sy,sw,sw,0,0,900,900);
+    const img=new Image(); img.onload=()=>{ const c=document.createElement('canvas'); c.width=c.height=900; const g=c.getContext('2d');
+      g.fillStyle='#10182E'; g.fillRect(0,0,900,900);  // dézoomée : le fond du cadre autour de la photo
+      const q=900/sw; g.drawImage(img,0,0,w,hh,-sx*q,-sy*q,w*q,hh*q);
       const u=c.toDataURL('image/jpeg',0.9); this.setState({photoUrl:u}); this.processPhoto(u); done(); }; img.onerror=()=>done(); img.src=s.photoRaw; }
   processPhoto(url){ const img=new Image(); img.onload=()=>{ const N=96, c=document.createElement('canvas'); c.width=c.height=N;
       const ctx=c.getContext('2d'); const m=Math.min(img.width,img.height);
@@ -1943,8 +1963,9 @@ class Component extends DCLogic {
       shapeEditBg: shapeCan?INK:'rgba(16,24,46,.4)',
       shapeEditNote: shapeCan?'Tu peux la modifier maintenant. Ensuite, elle sera verrouillée 30 jours.':'Verrouillée jusqu’au '+shapeNext+'. Une empreinte, c’est un engagement : une modification par mois.', isObSign:s.screen==='obSign', isObPhoto:s.screen==='obPhoto', isObFinal:s.screen==='obFinal',
       photoBg:cssImg(s.photoUrl),
-      cropRef:this.cropRef, onCropDown:this.onCropDown, onCropMove:this.onCropMove, onCropUp:this.onCropUp, onCropZoom:this.onCropZoom, cropZ:s.cropZ||1,
-      cropBg:cssImg(s.photoRaw||s.photoUrl), cropTr:'translate('+(s.cropTx||0).toFixed(1)+'px,'+(s.cropTy||0).toFixed(1)+'px) scale('+(s.cropZ||1)+')', hasPhoto:!!s.photoUrl, noPhotoYet:!s.photoUrl,
+      cropRef:this.cropRef, onCropDown:this.onCropDown, onCropMove:this.onCropMove, onCropUp:this.onCropUp, onCropZoom:this.onCropZoom, cropZ:s.cropZ||1, cropMin:this.cropMinOf(s.photoW,s.photoH).toFixed(3),
+      cropBg:cssImg(s.photoRaw||s.photoUrl), cropTr:'translate(-50%,-50%) translate('+(s.cropTx||0).toFixed(1)+'px,'+(s.cropTy||0).toFixed(1)+'px) scale('+(s.cropZ||1)+')',
+      cropW:(s.photoW&&s.photoH?s.photoW/Math.min(s.photoW,s.photoH)*100:100).toFixed(2)+'%', cropH:(s.photoW&&s.photoH?s.photoH/Math.min(s.photoW,s.photoH)*100:100).toFixed(2)+'%', hasPhoto:!!s.photoUrl, noPhotoYet:!s.photoUrl,
       photoNextBg:s.photoUrl?'#123C96':'rgba(16,24,46,.4)',
       photoPickLabel: s.photoBusy?'CONVERSION DE LA PHOTO…':s.photoErr?'FORMAT ILLISIBLE · RÉESSAIE':'PRENDRE OU CHOISIR UNE PHOTO',
       onPhotoFile:this.onPhotoFile, skipPhoto:this.skipPhoto,

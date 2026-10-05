@@ -92,6 +92,9 @@ npm test            # test de bout en bout sur les émulateurs (Java requis)
 `?lat=&lng=` remplace le GPS (pratique pour simuler deux personnes au même endroit dans deux navigateurs).
 Le SDK Firebase est embarqué dans `web/vendor/firebase/` (pas de CDN) ; `npm run vendor:firebase` le met à jour.
 
+Tests locaux (`npm test`) : créer une fois `functions/.secret.local` contenant `APNS_KEY=` (vide), sinon
+l'émulateur cherche la clé de notifications sur Google Cloud.
+
 ## Limites connues
 
 - L'UI est écrite du point de vue « lui » : la personne qui décide en premier voit « à elle de décider »

@@ -23,7 +23,10 @@ struct CloveWebView: UIViewRepresentable {
 
         // Dit à web/clove-api.js qu'il tourne dans l'app (mode plein écran + connexion Apple),
         // et lui ouvre un canal vers Swift : window.webkit.messageHandlers.clove.
-        let native = WKUserScript(source: "window.CLOVE_NATIVE = { platform: 'ios', apple: true };",
+        // appleUser : compte Apple déjà utilisé sur ce téléphone (gardé dans le trousseau, même après
+        // suppression de l'app) → la page reconnecte directement ce compte au lancement.
+        let appleUser = String((Keychain.get("appleUser") ?? "").filter { $0.isLetter || $0.isNumber || $0 == "." })
+        let native = WKUserScript(source: "window.CLOVE_NATIVE = { platform: 'ios', apple: true, push: true, background: true, appleUser: '\(appleUser)' };",
                                   injectionTime: .atDocumentStart, forMainFrameOnly: true)
         config.userContentController.addUserScript(native)
         config.userContentController.add(WeakMessageHandler(context.coordinator), name: "clove")
@@ -44,6 +47,7 @@ struct CloveWebView: UIViewRepresentable {
         if #available(iOS 16.4, *) { web.isInspectable = true } // Safari → Développement → ton iPhone
         #endif
         context.coordinator.webView = web
+        NativeBridge.shared.webView = web
         // Toujours la dernière version mise en ligne : on vide le cache des pages (pas la session Firebase,
         // qui est dans IndexedDB / localStorage), puis on charge sans cache.
         let caches: Set<String> = [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache, WKWebsiteDataTypeFetchCache]
@@ -62,10 +66,25 @@ struct CloveWebView: UIViewRepresentable {
 
         // MARK: Se connecter avec Apple
 
-        // web/clove-api.js demande : { type: 'appleSignIn', nonce: '<aléatoire>' }
+        // Messages de web/clove-api.js :
+        //   { type: 'appleSignIn', nonce }        → feuille « Se connecter avec Apple »
+        //   { type: 'push' }                      → autorisation des notifications, jeton renvoyé (pushToken)
+        //   { type: 'radar', on, key, url }       → position en arrière-plan tant que le radar est allumé
+        //   { type: 'signedOut' }                 → compte supprimé : on oublie le compte Apple
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard let body = message.body as? [String: Any], body["type"] as? String == "appleSignIn",
-                  let nonce = body["nonce"] as? String else { return }
+            guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+            switch type {
+            case "push": return Push.shared.register()
+            case "radar":
+                return BackgroundLocation.shared.setRadar(on: body["on"] as? Bool ?? false,
+                                                          key: body["key"] as? String, url: body["url"] as? String)
+            case "signedOut":
+                Keychain.set("appleUser", nil)
+                return BackgroundLocation.shared.setRadar(on: false, key: nil, url: nil)
+            case "appleSignIn": break
+            default: return
+            }
+            guard let nonce = body["nonce"] as? String else { return }
             let request = ASAuthorizationAppleIDProvider().createRequest()
             request.requestedScopes = [.fullName, .email]
             // Apple reçoit le hash du nonce ; Firebase vérifie ensuite le nonce brut.
@@ -81,6 +100,7 @@ struct CloveWebView: UIViewRepresentable {
                   let tokenData = credential.identityToken, let idToken = String(data: tokenData, encoding: .utf8) else {
                 return sendToWeb("appleError", ["code": "no-token", "message": "Jeton Apple manquant"])
             }
+            Keychain.set("appleUser", credential.user) // reconnexion directe après réinstallation
             sendToWeb("appleCredential", ["idToken": idToken, "user": credential.user])
         }
 
