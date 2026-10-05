@@ -12,5 +12,8 @@
 		<key>UIImageRespectsSafeAreaInsets</key>
 		<true/>
 	</dict>
+	<!-- Chiffrement : HTTPS uniquement (exempté) → plus de « Missing Compliance » sur TestFlight. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
